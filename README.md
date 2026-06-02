@@ -61,7 +61,7 @@ The server will keep running in that terminal window. **Keep the window open** w
 
 ### 4. Find your machine's hostname
 
-Your colleague will need this to connect. Run:
+Your counterpart will need this to connect. Run:
 
 ```bash
 hostname
