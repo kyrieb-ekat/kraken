@@ -200,11 +200,7 @@ function renderFolioPage(datasetId) {
             <td>${badge(f.image_status)}</td>
             <td>${f.segmented ? badge("done") : "—"}</td>
             <td>${f.text_pool_count}</td>
-            <td>
-              ${f.image_status !== "done"
-                ? `<button class="btn btn-secondary btn-sm" onclick="showFolioUpload(${f.id}, '${f.folio_label.replace(/'/g, "\\'")}', this)">Upload Image</button>`
-                : ""}
-            </td>
+            <td><button class="btn btn-secondary btn-sm" onclick="showFolioUpload(${f.id}, '${f.folio_label.replace(/'/g, "\\'")}', this)">Upload Image</button></td>
           </tr>`).join("")}
       </tbody>
     </table>`;
