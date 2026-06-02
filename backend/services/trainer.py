@@ -52,8 +52,13 @@ async def start_training(
     # -p 0.9 keeps 90% for training, 10% for validation (the default).
     # Use fixed-epoch mode when the user supplies a positive epoch count;
     # otherwise fall through to kraken's default early-stopping.
+    # --workers 0 is a global ketos flag (before the subcommand) that forces
+    # single-process data loading.  With workers > 0, PyTorch tries to pickle
+    # kraken's transform lambdas across process boundaries and fails with
+    # "Can't pickle local object resize_transform".
     cmd = [
-        "ketos", "train",
+        "ketos", "--workers", "0",
+        "train",
         "-f", "binary",
         "-o", str(model_out / "model"),
         "-p", "0.9",
