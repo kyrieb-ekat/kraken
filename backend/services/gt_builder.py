@@ -16,12 +16,17 @@ COMPILED_DIR = Path(__file__).parent.parent.parent / "data" / "compiled"
 def _write_alto_xml(xml_path: Path, img_path: Path, transcription: str) -> None:
     """Write a minimal ALTO 4 XML file for a single line crop.
 
-    ketos compile -f alto --force-type bbox reads these to build a bbox-style
-    binary dataset.  The image path in <fileName> must resolve correctly so we
-    always write the absolute path.
+    ketos compile -f alto parses TextLine elements in baseline mode by default.
+    It requires a BASELINE attribute (x0 y0 x1 y1 … point sequence) on each
+    TextLine or it silently skips the line.  We synthesise a straight horizontal
+    baseline at 75 % of the image height — reasonable for most manuscript hands.
+    A Shape/Polygon covering the full image is included as the boundary so
+    kraken has a complete region to extract from.
     """
     with Image.open(img_path) as im:
         w, h = im.size
+
+    baseline_y = int(h * 0.75)
 
     # Escape XML special characters in the transcription
     text = (transcription
@@ -43,7 +48,11 @@ def _write_alto_xml(xml_path: Path, img_path: Path, transcription: str) -> None:
             <Page WIDTH="{w}" HEIGHT="{h}" PHYSICAL_IMG_NR="0" ID="page_0">
               <PrintSpace HPOS="0" VPOS="0" WIDTH="{w}" HEIGHT="{h}">
                 <TextBlock HPOS="0" VPOS="0" WIDTH="{w}" HEIGHT="{h}" ID="block_0">
-                  <TextLine HPOS="0" VPOS="0" WIDTH="{w}" HEIGHT="{h}" ID="line_0">
+                  <TextLine HPOS="0" VPOS="0" WIDTH="{w}" HEIGHT="{h}" ID="line_0"
+                            BASELINE="0 {baseline_y} {w} {baseline_y}">
+                    <Shape>
+                      <Polygon POINTS="0 0 {w} 0 {w} {h} 0 {h}"/>
+                    </Shape>
                     <String CONTENT="{text}"/>
                   </TextLine>
                 </TextBlock>
@@ -120,7 +129,6 @@ async def compile_dataset(dataset_id: int, db: Session) -> Job:
     cmd = [
         "ketos", "compile",
         "-f", "alto",
-        "--force-type", "bbox",
         "-o", str(arrow_out),
         *[str(p) for p in xml_files],
     ]
