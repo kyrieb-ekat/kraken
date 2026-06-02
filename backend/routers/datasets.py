@@ -91,6 +91,51 @@ def delete_dataset(dataset_id: int, db: Session = Depends(get_db)):
     return {"deleted": dataset_id}
 
 
+@router.post("/{dataset_id}/reupload")
+async def reupload_csv(dataset_id: int, file: UploadFile = File(...), db: Session = Depends(get_db)):
+    """Re-parse a CSV and update text pools + image URLs for existing folios.
+    Preserves all segmentation, lines, and transcription work.
+    New folios found in the CSV are added; existing folios not in the CSV are left untouched.
+    """
+    dataset = db.query(Dataset).filter(Dataset.id == dataset_id).first()
+    if not dataset:
+        raise HTTPException(404, "Dataset not found")
+
+    content = await file.read()
+    try:
+        folios_data = parse_cantus_csv(content)
+    except Exception as exc:
+        raise HTTPException(400, f"CSV parse error: {exc}")
+
+    dataset.name = file.filename or dataset.name
+
+    existing_folios = {f.folio_label: f for f in db.query(Folio).filter(Folio.dataset_id == dataset_id).all()}
+
+    updated = 0
+    added = 0
+    for label, info in folios_data.items():
+        if label in existing_folios:
+            folio = existing_folios[label]
+            folio.set_text_pool(info["text_pool"])
+            if info["image_url"] and not folio.local_image_path:
+                folio.image_url = info["image_url"]
+                folio.image_status = "pending"
+            updated += 1
+        else:
+            folio = Folio(
+                dataset_id=dataset_id,
+                folio_label=label,
+                image_url=info["image_url"],
+                image_status="pending" if info["image_url"] else "failed",
+            )
+            folio.set_text_pool(info["text_pool"])
+            db.add(folio)
+            added += 1
+
+    db.commit()
+    return {"updated": updated, "added": added}
+
+
 @router.post("/{dataset_id}/fetch-images")
 async def fetch_images(dataset_id: int, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
     folios = (

@@ -109,11 +109,30 @@ async function loadDatasets() {
             <td class="text-muted">${new Date(ds.uploaded_at).toLocaleString()}</td>
             <td class="row-actions">
               <button class="btn btn-secondary btn-sm" onclick="showFolios(${ds.id}, '${ds.name}')">View Folios</button>
+              <label class="btn btn-secondary btn-sm" title="Re-upload CSV to refresh text pools without losing segmentation">
+                ↺ Re-upload
+                <input type="file" accept=".csv" style="display:none" onchange="reuploadDataset(${ds.id}, this)">
+              </label>
               <button class="btn btn-danger btn-sm" id="ds-delete-${ds.id}" onclick="deleteDataset(${ds.id}, '${ds.name.replace(/'/g, "\\'")}', this)">🗑</button>
             </td>
           </tr>`).join("")}
       </tbody>
     </table>`;
+}
+
+async function reuploadDataset(id, input) {
+  if (!input.files[0]) return;
+  setStatus("csv-upload-status", "Re-uploading CSV…");
+  const fd = new FormData();
+  fd.append("file", input.files[0]);
+  try {
+    const data = await api("POST", `/datasets/${id}/reupload`, fd);
+    setStatus("csv-upload-status", `Text pools refreshed: ${data.updated} folios updated, ${data.added} new folios added.`, "success");
+    loadDatasets();
+  } catch (err) {
+    setStatus("csv-upload-status", `Re-upload failed: ${err.message}`, "error");
+  }
+  input.value = "";
 }
 
 async function deleteDataset(id, name, btn) {
