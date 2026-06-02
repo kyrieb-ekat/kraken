@@ -646,8 +646,14 @@ document.getElementById("review-dataset-select").addEventListener("change", asyn
   folioSel.disabled = !dsId;
   if (!dsId) { _allFoliosForDataset = []; return; }
   const folios = await api("GET", `/datasets/${dsId}/folios`);
-  _allFoliosForDataset = folios;
-  folios.forEach(f => {
+  // Sort folios by label to ensure consistent ordering (for finding "previous" folio)
+  _allFoliosForDataset = folios.sort((a, b) => {
+    const aNum = parseInt(a.folio_label) || 0;
+    const bNum = parseInt(b.folio_label) || 0;
+    if (aNum !== bNum) return aNum - bNum;
+    return a.folio_label.localeCompare(b.folio_label);
+  });
+  _allFoliosForDataset.forEach(f => {
     const opt = new Option(`${f.folio_label} ${f.segmented ? "✓" : ""}`, f.id);
     folioSel.appendChild(opt);
   });
