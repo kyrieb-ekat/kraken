@@ -1,6 +1,6 @@
 # Kraken Training Interface
 
-A web application for training [Kraken](https://kraken.re) OCR models on medieval manuscripts. It lets a non-technical user review and correct transcriptions and manage training runs through a browser — including from a remote machine over a VPN.
+A web application for training [Kraken](https://kraken.re) OCR models on medieval manuscripts. It lets a user review and correct transcriptions and manage training runs through a browser — including from a remote machine over a VPN.
 
 ---
 
