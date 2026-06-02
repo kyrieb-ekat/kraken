@@ -1,0 +1,15 @@
+name: kraken
+channels:
+  - defaults
+dependencies:
+  - python=3.11
+  - pip
+  - pip:
+    - fastapi
+    - uvicorn[standard]
+    - sqlalchemy
+    - aiofiles
+    - httpx
+    - kraken
+    - Pillow
+    - python-multipart

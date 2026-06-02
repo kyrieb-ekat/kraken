@@ -1,0 +1,8 @@
+fastapi
+uvicorn[standard]
+sqlalchemy
+aiofiles
+httpx
+kraken
+Pillow
+python-multipart
