@@ -366,6 +366,13 @@ let _focusedLineId = null;          // line whose textarea currently has focus
 
 let _pendingDelete = null; // { ids: number[], btn: HTMLElement|null, cancelTimeout }
 
+// ── Polygon edit state ────────────────────────────────────────────────────────
+
+let editPolygonLineId    = null;  // line.id being edited, or null
+let _editPolygonOriginal = null;  // copy of polygon pts before edits (for cancel/undo)
+let _editDrag            = null;  // { idx: number } — vertex index being dragged
+let _ctxMenuLineId       = null;  // line.id whose context menu is open
+
 function _clearPendingDelete() {
   if (!_pendingDelete) return;
   clearTimeout(_pendingDelete.cancelTimeout);
@@ -424,6 +431,162 @@ async function _executeDelete() {
     ids.forEach(id => selectedLineIds.delete(id));
   }
   renderLineList();
+}
+
+// ── Polygon editor ────────────────────────────────────────────────────────────
+
+function enterEditPolygonMode(lineId) {
+  if (addLineMode) exitAddLineMode();
+  exitSplitMode();
+  exitMergeMode();
+  editPolygonLineId = lineId;
+  const line = currentFolioData.lines.find(l => l.id === lineId);
+  _editPolygonOriginal = line.polygon ? line.polygon.map(p => [...p]) : [];
+  document.getElementById("btn-done-editing").style.display = "";
+  setReviewHint("Drag vertices to reshape · right-click vertex to delete · Esc to cancel");
+  renderOverlay();
+}
+
+function exitEditPolygonMode(save) {
+  if (editPolygonLineId === null) return;
+  const lineId = editPolygonLineId;
+  editPolygonLineId = null;
+  _editDrag = null;
+  hidePolyContextMenu();
+
+  const line = currentFolioData.lines.find(l => l.id === lineId);
+  if (save && line) {
+    const oldPoly = _editPolygonOriginal;
+    const newPoly = line.polygon ? line.polygon.map(p => [...p]) : [];
+    if (JSON.stringify(oldPoly) !== JSON.stringify(newPoly)) {
+      const capturedId  = lineId;
+      const capturedOld = oldPoly;
+      api("PATCH", `/lines/${lineId}`, { polygon: newPoly })
+        .catch(err => alert(`Save failed: ${err.message}`));
+      pushUndo(`edit polygon line ${(line.line_index || 0) + 1}`, async () => {
+        const l = currentFolioData.lines.find(x => x.id === capturedId);
+        if (l) l.polygon = capturedOld;
+        await api("PATCH", `/lines/${capturedId}`, { polygon: capturedOld });
+        renderOverlay();
+      });
+    }
+  } else if (!save && line) {
+    line.polygon = _editPolygonOriginal;
+  }
+
+  _editPolygonOriginal = null;
+  document.getElementById("btn-done-editing").style.display = "none";
+  clearReviewHint();
+  renderOverlay();
+}
+
+function updateEditHandles() {
+  const grp = document.getElementById("edit-handles-group");
+  if (!grp) return;
+  if (editPolygonLineId === null) { grp.innerHTML = ""; return; }
+
+  const line = currentFolioData?.lines.find(l => l.id === editPolygonLineId);
+  if (!line?.polygon?.length) { grp.innerHTML = ""; return; }
+
+  const img    = document.getElementById("page-canvas");
+  const scaleX = img.clientWidth  / img.naturalWidth;
+  const scaleY = img.clientHeight / img.naturalHeight;
+  const pts    = line.polygon;
+
+  let html = "";
+
+  // Midpoint handles between consecutive vertices
+  for (let i = 0; i < pts.length; i++) {
+    const [ax, ay] = pts[i];
+    const [bx, by] = pts[(i + 1) % pts.length];
+    const mx = (ax + bx) / 2 * scaleX;
+    const my = (ay + by) / 2 * scaleY;
+    html += `<circle class="poly-mid-handle" data-midafter="${i}" cx="${mx}" cy="${my}" r="5"/>`;
+  }
+  // Vertex handles (drawn after midpoints so they appear on top)
+  pts.forEach(([x, y], i) => {
+    html += `<circle class="poly-vert-handle" data-vidx="${i}" cx="${x * scaleX}" cy="${y * scaleY}" r="7"/>`;
+  });
+
+  grp.innerHTML = html;
+
+  const capturedLineId = editPolygonLineId;
+
+  grp.querySelectorAll(".poly-vert-handle").forEach(c => {
+    const vidx = parseInt(c.dataset.vidx);
+    c.addEventListener("mousedown", (e) => {
+      if (e.button !== 0) return;
+      e.stopPropagation();
+      e.preventDefault();
+      _editDrag = { idx: vidx };
+    });
+    c.addEventListener("contextmenu", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (line.polygon.length > 3) showVertexContextMenu(e, capturedLineId, vidx);
+    });
+  });
+
+  grp.querySelectorAll(".poly-mid-handle").forEach(c => {
+    const after = parseInt(c.dataset.midafter);
+    c.addEventListener("mousedown", (e) => {
+      if (e.button !== 0) return;
+      e.stopPropagation();
+      e.preventDefault();
+      const [ax, ay] = pts[after];
+      const [bx, by] = pts[(after + 1) % pts.length];
+      line.polygon.splice(after + 1, 0, [Math.round((ax + bx) / 2), Math.round((ay + by) / 2)]);
+      _editDrag = { idx: after + 1 };
+      updateEditHandles();
+    });
+  });
+}
+
+function showPolyContextMenu(e, lineId) {
+  hidePolyContextMenu();
+  _ctxMenuLineId = lineId;
+  const menu = document.getElementById("poly-context-menu");
+  menu.style.display = "";
+  menu.style.left = e.clientX + "px";
+  menu.style.top  = e.clientY + "px";
+  menu.innerHTML = `
+    <button class="ctx-item" id="ctx-edit-polygon">Edit polygon</button>
+    <button class="ctx-item ctx-danger" id="ctx-delete-line">Delete line</button>`;
+  document.getElementById("ctx-edit-polygon").onclick = () => {
+    const id = _ctxMenuLineId;
+    hidePolyContextMenu();
+    enterEditPolygonMode(id);
+  };
+  document.getElementById("ctx-delete-line").onclick = () => {
+    const id = _ctxMenuLineId;
+    hidePolyContextMenu();
+    const btn = document.querySelector(`#line-item-${id} .btn-delete`);
+    _requestDelete([id], btn || null);
+  };
+}
+
+function showVertexContextMenu(e, lineId, vidx) {
+  hidePolyContextMenu();
+  _ctxMenuLineId = lineId;
+  const menu = document.getElementById("poly-context-menu");
+  menu.style.display = "";
+  menu.style.left = e.clientX + "px";
+  menu.style.top  = e.clientY + "px";
+  menu.innerHTML = `<button class="ctx-item ctx-danger" id="ctx-del-vertex">Delete vertex</button>`;
+  document.getElementById("ctx-del-vertex").onclick = () => {
+    hidePolyContextMenu();
+    const l = currentFolioData.lines.find(x => x.id === lineId);
+    if (l && l.polygon.length > 3) {
+      l.polygon.splice(vidx, 1);
+      updateEditHandles();
+    }
+  };
+}
+
+function hidePolyContextMenu() {
+  const menu = document.getElementById("poly-context-menu");
+  if (menu) menu.style.display = "none";
+  _ctxMenuLineId = null;
 }
 
 // ── Undo stack ────────────────────────────────────────────────────────────────
@@ -531,6 +694,13 @@ async function loadReviewFolio(folioId) {
   splitModeLineId = null;
   mergeModeLineId = null;
   _focusedLineId = null;
+  if (editPolygonLineId !== null) {
+    editPolygonLineId = null;
+    _editDrag = null;
+    _editPolygonOriginal = null;
+    document.getElementById("btn-done-editing").style.display = "none";
+    hidePolyContextMenu();
+  }
   clearReviewHint();
 
   try {
@@ -884,6 +1054,7 @@ function clearReviewHint() {
 document.addEventListener("keydown", (e) => {
   if (e.key === "Escape") {
     if (_pendingDelete) { _clearPendingDelete(); return; }
+    if (editPolygonLineId !== null) { exitEditPolygonMode(false); return; }
     if (addLineMode) { exitAddLineMode(); return; }
     exitSplitMode(); exitMergeMode();
     return;
@@ -942,10 +1113,11 @@ function renderOverlay() {
   // that add-line mode works even if the image hasn't finished loading yet.
   svg.style.pointerEvents = addLineMode ? "all" : "";
   const wrap = document.getElementById("page-canvas-wrap");
-  if      (addLineMode)              wrap.style.cursor = "crosshair";
-  else if (splitModeLineId !== null) wrap.style.cursor = "col-resize";
-  else if (mergeModeLineId !== null) wrap.style.cursor = "crosshair";
-  else                               wrap.style.cursor = "";
+  if      (editPolygonLineId !== null)  wrap.style.cursor = "default";
+  else if (addLineMode)                 wrap.style.cursor = "crosshair";
+  else if (splitModeLineId !== null)    wrap.style.cursor = "col-resize";
+  else if (mergeModeLineId !== null)    wrap.style.cursor = "crosshair";
+  else                                  wrap.style.cursor = "";
 
   if (!currentFolioData || !img.naturalWidth) { svg.innerHTML = ""; return; }
 
@@ -965,7 +1137,8 @@ function renderOverlay() {
     const isSelected  = selectedLineIds.has(line.id);
     const isSplitting = splitModeLineId === line.id;
     const isMerging   = mergeModeLineId === line.id;
-    const extraClass  = isSplitting ? " splitting" : isMerging ? " merging" : isSelected ? " selected" : "";
+    const isEditing   = editPolygonLineId === line.id;
+    const extraClass  = isEditing ? " editing" : isSplitting ? " splitting" : isMerging ? " merging" : isSelected ? " selected" : "";
     return `<polygon class="line-polygon${extraClass}"
       data-id="${line.id}" points="${points}"
       title="Line ${line.line_index + 1}" style="pointer-events:all"/>`;
@@ -975,16 +1148,25 @@ function renderOverlay() {
       stroke="#e67e22" stroke-width="2" stroke-dasharray="5,3"
       pointer-events="none" style="display:none"/>`
   // Polygon drawing overlay (filled by updateAddLineOverlay)
-  + `<g id="add-line-group"></g>`;
+  + `<g id="add-line-group"></g>`
+  // Polygon edit handles (filled by updateEditHandles)
+  + `<g id="edit-handles-group"></g>`;
 
   updateAddLineOverlay();
+  updateEditHandles();
 
   // ── Per-polygon click handling ───────────────────────────────────────────
   svg.querySelectorAll(".line-polygon").forEach(poly => {
     const id = parseInt(poly.dataset.id);
+    poly.addEventListener("contextmenu", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (editPolygonLineId === null) showPolyContextMenu(e, id);
+    });
     poly.addEventListener("click", async (e) => {
       e.stopPropagation();
       if (addLineMode) return; // clicks belong to the draw gesture
+      if (editPolygonLineId !== null) return; // in edit mode, clicks are for handles
 
       if (splitModeLineId !== null) {
         if (id !== splitModeLineId) return;
@@ -1088,7 +1270,7 @@ _wrap.addEventListener("wheel", (e) => {
 
 // Click-drag pan (only when no drawing mode is active)
 _wrap.addEventListener("mousedown", (e) => {
-  if (addLineMode || splitModeLineId !== null || mergeModeLineId !== null) return;
+  if (addLineMode || splitModeLineId !== null || mergeModeLineId !== null || editPolygonLineId !== null) return;
   if (e.button !== 0) return;
   _panStart = { bx: e.clientX - _viewPanX, by: e.clientY - _viewPanY };
   _panMoved = false;
@@ -1096,6 +1278,22 @@ _wrap.addEventListener("mousedown", (e) => {
 });
 
 document.addEventListener("mousemove", (e) => {
+  // Polygon vertex drag — handled before pan
+  if (_editDrag !== null && editPolygonLineId !== null) {
+    const line = currentFolioData?.lines.find(l => l.id === editPolygonLineId);
+    if (line?.polygon) {
+      const svg    = document.getElementById("seg-overlay");
+      const img    = document.getElementById("page-canvas");
+      const r      = svg.getBoundingClientRect();
+      const scaleX = img.naturalWidth  / img.clientWidth;
+      const scaleY = img.naturalHeight / img.clientHeight;
+      const svgX   = (e.clientX - r.left) / _viewZoom;
+      const svgY   = (e.clientY - r.top)  / _viewZoom;
+      line.polygon[_editDrag.idx] = [Math.round(svgX * scaleX), Math.round(svgY * scaleY)];
+      updateEditHandles();
+    }
+    return;
+  }
   if (!_panStart) return;
   const dx = e.clientX - (_panStart.bx + _viewPanX);
   const dy = e.clientY - (_panStart.by + _viewPanY);
@@ -1107,6 +1305,7 @@ document.addEventListener("mousemove", (e) => {
 });
 
 document.addEventListener("mouseup", () => {
+  _editDrag = null;
   if (!_panStart) return;
   _panStart = null;
   _wrap.classList.remove("panning");
@@ -1180,6 +1379,8 @@ function exitAddLineMode() {
   renderOverlay();
 }
 
+document.getElementById("btn-done-editing").addEventListener("click", () => exitEditPolygonMode(true));
+
 document.getElementById("btn-add-line").addEventListener("click", () => {
   if (addLineMode) { exitAddLineMode(); return; }
   addLineMode = true;
@@ -1195,6 +1396,14 @@ document.getElementById("btn-add-line").addEventListener("click", () => {
 document.getElementById("page-canvas").addEventListener("dragstart", e => e.preventDefault());
 
 const _svgEl = document.getElementById("seg-overlay");
+
+// Close context menu when clicking anywhere outside it
+document.addEventListener("click", (e) => {
+  if (_ctxMenuLineId !== null && !e.target.closest("#poly-context-menu")) hidePolyContextMenu();
+});
+
+// Suppress browser context menu on the SVG surface (we use our own)
+_svgEl.addEventListener("contextmenu", e => e.preventDefault());
 
 // ── Polygon point placement ───────────────────────────────────────────────────
 _svgEl.addEventListener("click", async (e) => {

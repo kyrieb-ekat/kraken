@@ -11,6 +11,47 @@ from backend.database import Folio, Line
 LINES_DIR = Path(__file__).parent.parent.parent / "data" / "lines"
 
 
+def _split_polygon_vertical(pts: list, split_x: int) -> tuple[list, list]:
+    """Split a polygon into left and right sub-polygons at the vertical line x = split_x."""
+    left, right = [], []
+    n = len(pts)
+    for i in range(n):
+        ax, ay = pts[i][0], pts[i][1]
+        bx, by = pts[(i + 1) % n][0], pts[(i + 1) % n][1]
+        if ax <= split_x:
+            left.append([ax, ay])
+        if ax >= split_x:
+            right.append([ax, ay])
+        if (ax < split_x < bx) or (bx < split_x < ax):
+            t = (split_x - ax) / (bx - ax)
+            iy = int(round(ay + t * (by - ay)))
+            left.append([split_x, iy])
+            right.append([split_x, iy])
+    return left, right
+
+
+def _convex_hull(pts: list) -> list:
+    """Andrew's monotone chain convex hull on 2D integer points."""
+    points = sorted({(int(p[0]), int(p[1])) for p in pts})
+    if len(points) < 3:
+        return [[p[0], p[1]] for p in points]
+
+    def cross(O, A, B):
+        return (A[0] - O[0]) * (B[1] - O[1]) - (A[1] - O[1]) * (B[0] - O[0])
+
+    lower: list = []
+    for p in points:
+        while len(lower) >= 2 and cross(lower[-2], lower[-1], p) <= 0:
+            lower.pop()
+        lower.append(p)
+    upper: list = []
+    for p in reversed(points):
+        while len(upper) >= 2 and cross(upper[-2], upper[-1], p) <= 0:
+            upper.pop()
+        upper.append(p)
+    return [[p[0], p[1]] for p in lower[:-1] + upper[:-1]]
+
+
 def folio_lines_dir(folio_id: int) -> Path:
     d = LINES_DIR / str(folio_id)
     d.mkdir(parents=True, exist_ok=True)
@@ -149,8 +190,11 @@ def split_line(line: Line, x_ratio: float, page_image_path: str, db: Session) ->
     crop_a.save(path_a)
     crop_b.save(path_b)
 
-    poly_a = [[x0, y0], [split_x, y0], [split_x, y1], [x0, y1]]
-    poly_b = [[split_x, y0], [x1, y0], [x1, y1], [split_x, y1]]
+    poly_a, poly_b = _split_polygon_vertical(polygon, split_x)
+    if len(poly_a) < 3:
+        poly_a = [[x0, y0], [split_x, y0], [split_x, y1], [x0, y1]]
+    if len(poly_b) < 3:
+        poly_b = [[split_x, y0], [x1, y0], [x1, y1], [split_x, y1]]
 
     line_a = Line(folio_id=folio_id, line_index=idx_a, crop_path=str(path_a),
                   transcription=line.transcription, confirmed=False)
@@ -209,7 +253,12 @@ def merge_lines(line_a: Line, line_b: Line, page_image_path: str, db: Session) -
 
     merged = Line(folio_id=folio_id, line_index=idx, crop_path=str(path),
                   transcription=merged_text, confirmed=False)
-    merged.set_polygon([[x0, y0], [x1, y0], [x1, y1], [x0, y1]])
+    merged_polygon = _convex_hull(
+        list(line_a.get_polygon() or []) + list(line_b.get_polygon() or [])
+    )
+    if len(merged_polygon) < 3:
+        merged_polygon = [[x0, y0], [x1, y0], [x1, y1], [x0, y1]]
+    merged.set_polygon(merged_polygon)
 
     db.delete(line_a)
     db.delete(line_b)

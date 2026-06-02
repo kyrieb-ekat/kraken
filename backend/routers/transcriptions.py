@@ -71,6 +71,7 @@ class LineUpdate(BaseModel):
     transcription: str | None = None
     confirmed: bool | None = None
     line_index: int | None = None
+    polygon: list | None = None
 
 
 @router.patch("/lines/{line_id}")
@@ -84,6 +85,8 @@ def update_line(line_id: int, body: LineUpdate, db: Session = Depends(get_db)):
         line.confirmed = body.confirmed
     if body.line_index is not None:
         line.line_index = body.line_index
+    if body.polygon is not None:
+        line.set_polygon(body.polygon)
     db.commit()
     return {"id": line.id, "transcription": line.transcription, "confirmed": line.confirmed, "line_index": line.line_index}
 

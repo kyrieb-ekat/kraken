@@ -630,6 +630,46 @@ tr:hover td { background: var(--accent-light); }
 .folio-upload-row td { background: var(--accent-light); padding: 10px 12px; }
 .folio-upload-inline { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 
+/* ── Polygon editor ───────────────────────────────────────────────────────── */
+
+.line-polygon.editing { fill: rgba(25,118,210,0.08); stroke: #1976d2; stroke-width: 2; stroke-dasharray: 6,3; }
+
+.poly-vert-handle { fill: #1976d2; stroke: #fff; stroke-width: 1.5; cursor: grab; }
+.poly-vert-handle:hover { fill: #0d47a1; }
+.poly-vert-handle:active { cursor: grabbing; }
+
+.poly-mid-handle { fill: #fff; stroke: #1976d2; stroke-width: 1.5; cursor: crosshair; opacity: 0.65; }
+.poly-mid-handle:hover { fill: #bbdefb; opacity: 1; }
+
+#poly-context-menu {
+  position: fixed;
+  z-index: 500;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 4px 16px rgba(0,0,0,0.18);
+  min-width: 148px;
+  padding: 4px 0;
+  display: none;
+}
+
+.ctx-item {
+  display: block;
+  width: 100%;
+  padding: 7px 14px;
+  text-align: left;
+  background: none;
+  border: none;
+  font: inherit;
+  font-size: 0.88rem;
+  cursor: pointer;
+  color: var(--text);
+  white-space: nowrap;
+}
+.ctx-item:hover { background: var(--accent-light); }
+.ctx-item.ctx-danger { color: var(--danger); }
+.ctx-item.ctx-danger:hover { background: var(--danger-light); }
+
 /* ── Undo toast ────────────────────────────────────────────────────────────── */
 #undo-toast {
   position: fixed;
