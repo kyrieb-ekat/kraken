@@ -15,9 +15,9 @@ router = APIRouter(prefix="/training", tags=["training"])
 # ── Compile ground truth ───────────────────────────────────────────────────────
 
 @router.post("/compile/{dataset_id}")
-def compile_gt(dataset_id: int, db: Session = Depends(get_db)):
+async def compile_gt(dataset_id: int, db: Session = Depends(get_db)):
     try:
-        job = gt_builder.compile_dataset(dataset_id, db)
+        job = await gt_builder.compile_dataset(dataset_id, db)
     except ValueError as exc:
         raise HTTPException(400, str(exc))
     except Exception as exc:

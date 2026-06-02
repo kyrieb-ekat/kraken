@@ -26,21 +26,13 @@ async def start_training(
     base_model: str | None,
     db: Session,
 ) -> Job:
-    # Read the image manifest produced by the compile (GT-prep) step
-    manifest = COMPILED_DIR / f"dataset_{dataset_id}.txt"
-    if not manifest.exists():
+    # Look for the binary .arrow dataset produced by the compile step
+    arrow_path = COMPILED_DIR / f"dataset_{dataset_id}.arrow"
+    if not arrow_path.exists():
         raise FileNotFoundError(
-            f"No compiled ground truth found for dataset {dataset_id}. "
+            f"No compiled dataset found for dataset {dataset_id}. "
             "Run 'Compile GT' first."
         )
-
-    img_files = [
-        line.strip()
-        for line in manifest.read_text(encoding="utf-8").splitlines()
-        if line.strip()
-    ]
-    if not img_files:
-        raise FileNotFoundError("Manifest is empty — run 'Compile GT' again.")
 
     model_out = MODELS_DIR / output_name
     model_out.mkdir(parents=True, exist_ok=True)
@@ -56,13 +48,13 @@ async def start_training(
     job.set_extra({"output_name": output_name, "epochs": epochs})
     db.commit()
 
-    # ketos train -f path: discovers .gt.txt siblings next to each image.
+    # ketos train -f binary: reads the pre-compiled .arrow dataset.
     # -p 0.9 keeps 90% for training, 10% for validation (the default).
     # Use fixed-epoch mode when the user supplies a positive epoch count;
     # otherwise fall through to kraken's default early-stopping.
     cmd = [
         "ketos", "train",
-        "-f", "path",
+        "-f", "binary",
         "-o", str(model_out / "model"),
         "-p", "0.9",
     ]
@@ -73,7 +65,7 @@ async def start_training(
     if base_model:
         cmd += ["--load", base_model]
 
-    cmd += img_files
+    cmd += [str(arrow_path)]
 
     proc = await asyncio.create_subprocess_exec(
         *cmd,
