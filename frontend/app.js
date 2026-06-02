@@ -289,6 +289,7 @@ function showFolioUpload(folioId, label, triggerBtn) {
 
 let currentFolioData = null;   // full response from /folios/{id}/lines
 let selectedLineIds = new Set();
+let _allFoliosForDataset = []; // folio list for current dataset (to find previous folio)
 let addLineMode    = false;
 let addLinePolygon = [];   // [[imgX, imgY], ...] points in image natural-pixel coords
 let _addLineCursor = null; // {x, y} in SVG viewBox coords for live preview
@@ -643,8 +644,9 @@ document.getElementById("review-dataset-select").addEventListener("change", asyn
   const folioSel = document.getElementById("review-folio-select");
   folioSel.innerHTML = '<option value="">— Select folio —</option>';
   folioSel.disabled = !dsId;
-  if (!dsId) return;
+  if (!dsId) { _allFoliosForDataset = []; return; }
   const folios = await api("GET", `/datasets/${dsId}/folios`);
+  _allFoliosForDataset = folios;
   folios.forEach(f => {
     const opt = new Option(`${f.folio_label} ${f.segmented ? "✓" : ""}`, f.id);
     folioSel.appendChild(opt);
@@ -706,6 +708,21 @@ async function loadReviewFolio(folioId) {
   } catch (err) {
     document.getElementById("review-status").textContent = `Error: ${err.message}`;
     return;
+  }
+
+  // Prepend last chant from previous folio to text pool (for continuity)
+  const currentFolioIndex = _allFoliosForDataset.findIndex(f => f.id === folioId);
+  if (currentFolioIndex > 0) {
+    const prevFolio = _allFoliosForDataset[currentFolioIndex - 1];
+    try {
+      const prevData = await api("GET", `/folios/${prevFolio.id}/text-pool`);
+      if (prevData.text_pool && prevData.text_pool.length > 0) {
+        const lastChant = prevData.text_pool[prevData.text_pool.length - 1];
+        currentFolioData.text_pool.unshift(`← ${lastChant}`);
+      }
+    } catch (err) {
+      // silently ignore if can't fetch previous folio
+    }
   }
 
   document.getElementById("review-folio-heading").textContent = currentFolioData.folio_label;
