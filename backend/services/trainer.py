@@ -110,9 +110,12 @@ async def _stream_to_file(
 
 
 async def stream_logs(job_id: int, db: Session) -> AsyncIterator[str]:
-    """
-    Async generator yielding log lines as SSE data.
-    First replays the existing log file, then tails new lines until the job ends.
+    """Async generator yielding log lines as SSE data.
+
+    Replays the existing log file, then tails it by polling while the
+    subprocess is still running.  We deliberately do NOT read from
+    proc.stdout here — _stream_to_file already owns that stream, and two
+    readers on the same asyncio.StreamReader split output unpredictably.
     """
     job = db.query(Job).filter(Job.id == job_id).first()
     if not job or not job.log_path:
@@ -120,20 +123,30 @@ async def stream_logs(job_id: int, db: Session) -> AsyncIterator[str]:
 
     log_path = Path(job.log_path)
 
-    # Replay existing content
+    # Replay whatever has been written so far
+    offset = 0
     if log_path.exists():
         with open(log_path, "r", errors="replace") as f:
             for line in f:
                 yield line.rstrip("\n")
+            offset = f.tell()
 
-    # Tail new content while process is running
-    if job_id in _procs:
-        proc = _procs[job_id]
-        try:
-            async for line in proc.stdout:
-                yield line.decode(errors="replace").rstrip("\n")
-        except Exception:
-            pass
+    # Tail the file while the process is alive
+    while job_id in _procs:
+        await asyncio.sleep(0.5)
+        if log_path.exists():
+            with open(log_path, "r", errors="replace") as f:
+                f.seek(offset)
+                for line in f:
+                    yield line.rstrip("\n")
+                offset = f.tell()
+
+    # Drain any final lines written after the process exited
+    if log_path.exists():
+        with open(log_path, "r", errors="replace") as f:
+            f.seek(offset)
+            for line in f:
+                yield line.rstrip("\n")
 
 
 def stop_job(job_id: int, db: Session) -> bool:

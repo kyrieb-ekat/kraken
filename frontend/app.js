@@ -37,7 +37,9 @@ function switchView(name) {
   document.querySelectorAll("nav button").forEach(b => b.classList.toggle("active", b.dataset.view === name));
   localStorage.setItem("kraken_active_view", name);
   if (name === "review") populateReviewDatasetSelect();
-  if (name === "training") { populateTrainingSelects(); loadJobs(); }
+  if (name === "training") { populateTrainingSelects(); loadJobs().then(jobs => {
+    if (jobs && jobs.some(j => j.status === "running")) startJobPolling();
+  }); }
   if (name === "models") loadModels();
 }
 
@@ -1725,6 +1727,54 @@ window.addEventListener("resize", () => { renderOverlay(); applyViewTransform();
 
 let activeJobId = null;
 let logEventSource = null;
+let _jobPollTimer = null;
+
+// Poll job status every 5 s while any job is running so the table stays
+// current without the user having to click anything.
+function startJobPolling() {
+  if (_jobPollTimer) return;
+  _jobPollTimer = setInterval(async () => {
+    const jobs = await api("GET", "/training/jobs").catch(() => []);
+    const anyRunning = jobs.some(j => j.status === "running");
+    // Refresh the table in place (don't wipe the active log stream)
+    const wrap = document.getElementById("jobs-table-wrap");
+    if (wrap && jobs.length) {
+      wrap.innerHTML = `
+        <table>
+          <thead><tr><th>#</th><th>Type</th><th>Status</th><th>Dataset</th><th>Started</th><th>Finished</th><th></th></tr></thead>
+          <tbody>
+            ${jobs.map(j => `
+              <tr>
+                <td>${j.id}</td>
+                <td>${j.type}</td>
+                <td>${badge(j.status)}</td>
+                <td>${j.dataset_id || "—"}</td>
+                <td class="text-muted">${j.started_at ? new Date(j.started_at).toLocaleString() : "—"}</td>
+                <td class="text-muted">${j.finished_at ? new Date(j.finished_at).toLocaleString() : "—"}</td>
+                <td>${j.log_path
+                  ? `<button class="btn btn-secondary btn-sm" onclick="startLogStream(${j.id}, '${j.status}')">${j.status === "running" ? "View logs" : j.status === "failed" ? "View error log" : "Replay logs"}</button>`
+                  : ""
+                }</td>
+              </tr>`).join("")}
+          </tbody>
+        </table>`;
+    }
+    // Update the active-job badge if we have an active job
+    if (activeJobId) {
+      const activeJob = jobs.find(j => j.id === activeJobId);
+      if (activeJob && activeJob.status !== "running") {
+        document.getElementById("active-job-badge").innerHTML = badge(activeJob.status) + ` Job #${activeJobId}`;
+        document.getElementById("btn-stop-train").disabled = true;
+        document.getElementById("btn-start-train").disabled = false;
+      }
+    }
+    if (!anyRunning) stopJobPolling();
+  }, 5000);
+}
+
+function stopJobPolling() {
+  if (_jobPollTimer) { clearInterval(_jobPollTimer); _jobPollTimer = null; }
+}
 
 async function populateTrainingSelects() {
   const datasets = await api("GET", "/datasets");
@@ -1784,6 +1834,7 @@ document.getElementById("btn-start-train").addEventListener("click", async () =>
     activeJobId = data.job_id;
     startLogStream(data.job_id);
     loadJobs();
+    startJobPolling();
   } catch (err) {
     setStatus("train-status", `Error: ${err.message}`, "error");
   }
@@ -1830,7 +1881,7 @@ function startLogStream(jobId, knownStatus) {
 async function loadJobs() {
   const jobs = await api("GET", "/training/jobs");
   const wrap = document.getElementById("jobs-table-wrap");
-  if (!jobs.length) { wrap.innerHTML = '<div class="empty-state">No jobs yet.</div>'; return; }
+  if (!jobs.length) { wrap.innerHTML = '<div class="empty-state">No jobs yet.</div>'; return jobs; }
   wrap.innerHTML = `
     <table>
       <thead><tr><th>#</th><th>Type</th><th>Status</th><th>Dataset</th><th>Started</th><th>Finished</th><th></th></tr></thead>
@@ -1850,6 +1901,7 @@ async function loadJobs() {
           </tr>`).join("")}
       </tbody>
     </table>`;
+  return jobs;
 }
 
 // ── MODELS VIEW ───────────────────────────────────────────────────────────────
