@@ -753,7 +753,7 @@ async function loadReviewFolio(folioId) {
   document.getElementById("pool-count").textContent = pool.length;
   document.getElementById("text-pool-list").innerHTML =
     pool.map((t, i) => `<div class="pool-item" title="Click to copy" onclick="copyToSelected('${t.replace(/'/g, "\\'")}')">
-      <strong>${i + 1}.</strong> ${t}
+      <strong>${i}.</strong> ${t}
     </div>`).join("") || "<em>No text pool entries</em>";
 
   renderLineList();
