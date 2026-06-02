@@ -1075,6 +1075,38 @@ document.addEventListener("keydown", (e) => {
     return;
   }
   if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+
+  // Hotkey: A for add line
+  if ((e.key === "a" || e.key === "A") && !e.ctrlKey && !e.metaKey) {
+    e.preventDefault();
+    if (!addLineMode) {
+      document.getElementById("btn-add-line").click();
+    }
+    return;
+  }
+
+  // Hotkey: S for split (when line selected)
+  if ((e.key === "s" || e.key === "S") && !e.ctrlKey && !e.metaKey) {
+    e.preventDefault();
+    const lineId = [...selectedLineIds][0];
+    if (lineId) {
+      const line = currentFolioData?.lines.find(l => l.id === lineId);
+      if (line) toggleSplitMode(lineId);
+    }
+    return;
+  }
+
+  // Hotkey: M for merge (when line selected)
+  if ((e.key === "m" || e.key === "M") && !e.ctrlKey && !e.metaKey) {
+    e.preventDefault();
+    const lineId = [...selectedLineIds][0];
+    if (lineId) {
+      const line = currentFolioData?.lines.find(l => l.id === lineId);
+      if (line) toggleMergeMode(lineId);
+    }
+    return;
+  }
+
   if ((e.key === "Delete" || e.key === "Backspace") && selectedLineIds.size > 0) {
     e.preventDefault();
     if (_pendingDelete) { _executeDelete(); return; }
@@ -1380,6 +1412,23 @@ function exitAddLineMode() {
 }
 
 document.getElementById("btn-done-editing").addEventListener("click", () => exitEditPolygonMode(true));
+
+// ── Help modal ────────────────────────────────────────────────────────────────
+
+function openHelpModal() {
+  document.getElementById("help-modal").style.display = "";
+  document.getElementById("help-modal-backdrop").style.display = "";
+}
+
+function closeHelpModal() {
+  document.getElementById("help-modal").style.display = "none";
+  document.getElementById("help-modal-backdrop").style.display = "none";
+}
+
+document.getElementById("btn-help").addEventListener("click", openHelpModal);
+document.getElementById("help-close-btn").addEventListener("click", closeHelpModal);
+document.getElementById("help-modal-backdrop").addEventListener("click", closeHelpModal);
+document.getElementById("help-modal").addEventListener("click", e => e.stopPropagation());
 
 document.getElementById("btn-add-line").addEventListener("click", () => {
   if (addLineMode) { exitAddLineMode(); return; }

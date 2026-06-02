@@ -172,6 +172,7 @@
             </div>
             <button class="btn btn-secondary btn-sm" id="btn-add-line">+ Add Line</button>
             <button class="btn btn-primary btn-sm" id="btn-done-editing" style="display:none">Done Editing</button>
+            <button class="btn btn-secondary btn-sm" id="btn-help" title="Keyboard shortcuts">?</button>
             <span id="add-line-hint" class="text-muted" style="display:none; font-size:0.8rem;"></span>
           </div>
         </div>
@@ -296,6 +297,38 @@
 </main>
 
 <div id="poly-context-menu"></div>
+
+<div id="help-modal-backdrop" style="display:none"></div>
+<div id="help-modal" style="display:none">
+  <div class="help-modal-content">
+    <div class="help-modal-header">
+      <h2>Keyboard Shortcuts</h2>
+      <button id="help-close-btn" style="background:none; border:none; font-size:1.5rem; cursor:pointer; color:var(--text-muted);">×</button>
+    </div>
+    <div class="help-modal-body">
+      <div class="help-section">
+        <h3>Lines</h3>
+        <div class="help-item"><kbd>A</kbd> Add a new line by drawing a polygon</div>
+        <div class="help-item"><kbd>S</kbd> Split selected line (then click split point on image)</div>
+        <div class="help-item"><kbd>M</kbd> Merge selected line (then click line to merge with)</div>
+        <div class="help-item"><kbd>Delete</kbd> or <kbd>Backspace</kbd> Delete selected lines</div>
+      </div>
+      <div class="help-section">
+        <h3>Editing</h3>
+        <div class="help-item"><kbd>Click</kbd> Select/deselect line on image</div>
+        <div class="help-item"><kbd>Edit</kbd> button Edit polygon shape (drag vertices, insert/delete points)</div>
+        <div class="help-item"><kbd>Ctrl/Cmd+Z</kbd> Undo last action</div>
+      </div>
+      <div class="help-section">
+        <h3>Navigation</h3>
+        <div class="help-item"><kbd>Esc</kbd> Cancel current mode (add, split, merge, edit)</div>
+        <div class="help-item"><kbd>Scroll wheel</kbd> Zoom in/out</div>
+        <div class="help-item"><kbd>Click+Drag</kbd> Pan the image</div>
+      </div>
+    </div>
+  </div>
+</div>
+
 <script src="/app.js"></script>
 </body>
 </html>

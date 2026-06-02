@@ -630,6 +630,94 @@ tr:hover td { background: var(--accent-light); }
 .folio-upload-row td { background: var(--accent-light); padding: 10px 12px; }
 .folio-upload-inline { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 
+/* ── Help modal ───────────────────────────────────────────────────────────── */
+
+#help-modal-backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0,0,0,0.5);
+  z-index: 600;
+}
+
+#help-modal {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 601;
+  max-width: 500px;
+  max-height: 80vh;
+  overflow-y: auto;
+}
+
+.help-modal-content {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 8px 32px rgba(0,0,0,0.25);
+  padding: 0;
+}
+
+.help-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.help-modal-header h2 {
+  margin: 0;
+  font-size: 1.1rem;
+  color: var(--accent);
+}
+
+.help-modal-body {
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.help-section h3 {
+  font-size: 0.9rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 8px;
+  margin-top: 0;
+}
+
+.help-item {
+  font-size: 0.85rem;
+  line-height: 1.6;
+  color: var(--text);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.help-item kbd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 32px;
+  height: 24px;
+  padding: 0 6px;
+  background: var(--accent-light);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  font-family: "Courier New", monospace;
+  font-size: 0.75rem;
+  font-weight: bold;
+  color: var(--accent);
+  flex-shrink: 0;
+}
+
 /* ── Polygon editor ───────────────────────────────────────────────────────── */
 
 .line-polygon.editing { fill: rgba(25,118,210,0.08); stroke: #1976d2; stroke-width: 2; stroke-dasharray: 6,3; }
