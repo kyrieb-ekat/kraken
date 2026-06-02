@@ -699,6 +699,8 @@ async function loadReviewFolio(folioId) {
   }
   clearReviewHint();
 
+  const oldFolioId = currentFolioData?.folio_id;
+
   try {
     currentFolioData = await api("GET", `/folios/${folioId}/lines`);
   } catch (err) {
@@ -710,7 +712,7 @@ async function loadReviewFolio(folioId) {
 
   // Page image — set onload before src so cached loads are never missed
   const img = document.getElementById("page-canvas");
-  resetView();
+  if (oldFolioId !== folioId) resetView();  // only reset if switching to a different folio
   if (currentFolioData.page_image_url) {
     img.onload = () => {
       // Size the transform root to exactly the image so the SVG matches
