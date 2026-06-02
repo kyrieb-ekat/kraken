@@ -814,6 +814,7 @@ function renderLineList() {
 
     item.querySelector(".btn-split").addEventListener("click", () => toggleSplitMode(line.id));
     item.querySelector(".btn-merge").addEventListener("click", () => toggleMergeMode(line.id));
+    item.querySelector(".btn-edit-polygon").addEventListener("click", () => enterEditPolygonMode(line.id));
     item.querySelector(".btn-delete").addEventListener("click", (e) => {
       const btn = e.currentTarget;
       if (_pendingDelete?.ids.length === 1 && _pendingDelete.ids[0] === line.id) {
@@ -883,6 +884,7 @@ function lineItemHTML(line) {
             title="Enter merge mode, then click the line to merge with on the page viewer">
             ${isMerging ? "Cancel Merge" : "Merge"}
           </button>
+          <button class="btn btn-secondary btn-sm btn-edit-polygon" title="Edit polygon shape">Edit</button>
           <button class="btn btn-danger btn-sm btn-delete" title="Delete line (or press Delete key)">Delete</button>
         </div>
       </div>
