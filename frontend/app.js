@@ -691,6 +691,7 @@ document.getElementById("btn-confirm-all").addEventListener("click", async () =>
 });
 
 async function loadReviewFolio(folioId) {
+  folioId = parseInt(folioId, 10);
   document.getElementById("review-empty").style.display = "none";
   document.getElementById("review-container").style.display = "";
   document.getElementById("btn-confirm-all").disabled = false;
