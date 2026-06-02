@@ -26,7 +26,10 @@ def _write_alto_xml(xml_path: Path, img_path: Path, transcription: str) -> None:
     with Image.open(img_path) as im:
         w, h = im.size
 
-    baseline_y = int(h * 0.75)
+    # Use w-1 / h-1: kraken's extract_polygons treats coordinates as pixel
+    # indices (0-based), so a point at (w, h) is one pixel outside the image.
+    w1, h1 = w - 1, h - 1
+    baseline_y = int(h1 * 0.75)
 
     # Escape XML special characters in the transcription
     text = (transcription
@@ -49,9 +52,9 @@ def _write_alto_xml(xml_path: Path, img_path: Path, transcription: str) -> None:
               <PrintSpace HPOS="0" VPOS="0" WIDTH="{w}" HEIGHT="{h}">
                 <TextBlock HPOS="0" VPOS="0" WIDTH="{w}" HEIGHT="{h}" ID="block_0">
                   <TextLine HPOS="0" VPOS="0" WIDTH="{w}" HEIGHT="{h}" ID="line_0"
-                            BASELINE="0 {baseline_y} {w} {baseline_y}">
+                            BASELINE="0 {baseline_y} {w1} {baseline_y}">
                     <Shape>
-                      <Polygon POINTS="0 0 {w} 0 {w} {h} 0 {h}"/>
+                      <Polygon POINTS="0 0 {w1} 0 {w1} {h1} 0 {h1}"/>
                     </Shape>
                     <String CONTENT="{text}"/>
                   </TextLine>
