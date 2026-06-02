@@ -1,4 +1,5 @@
 import asyncio
+import os
 import signal
 from datetime import datetime
 from pathlib import Path
@@ -72,10 +73,17 @@ async def start_training(
 
     cmd += [str(arrow_path)]
 
+    # CTC loss is not yet implemented for Apple MPS. Setting this fallback
+    # env var allows that one op to run on CPU while everything else stays
+    # on the MPS device (GPU).  Has no effect on non-Apple hardware.
+    env = os.environ.copy()
+    env["PYTORCH_ENABLE_MPS_FALLBACK"] = "1"
+
     proc = await asyncio.create_subprocess_exec(
         *cmd,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.STDOUT,
+        env=env,
     )
     _procs[job.id] = proc
     job.pid = proc.pid
