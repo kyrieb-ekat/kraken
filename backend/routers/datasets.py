@@ -4,7 +4,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Up
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
-from backend.database import Dataset, Folio, get_db
+from backend.database import Dataset, Folio, Line, get_db
 from backend.services.csv_parser import parse_cantus_csv
 from backend.services.image_fetcher import (
     assign_uploaded_image,
@@ -75,6 +75,20 @@ def list_folios(dataset_id: int, db: Session = Depends(get_db)):
         }
         for f in folios
     ]
+
+
+@router.delete("/{dataset_id}")
+def delete_dataset(dataset_id: int, db: Session = Depends(get_db)):
+    dataset = db.query(Dataset).filter(Dataset.id == dataset_id).first()
+    if not dataset:
+        raise HTTPException(404, "Dataset not found")
+    folio_ids = [f.id for f in db.query(Folio).filter(Folio.dataset_id == dataset_id).all()]
+    if folio_ids:
+        db.query(Line).filter(Line.folio_id.in_(folio_ids)).delete(synchronize_session=False)
+    db.query(Folio).filter(Folio.dataset_id == dataset_id).delete(synchronize_session=False)
+    db.delete(dataset)
+    db.commit()
+    return {"deleted": dataset_id}
 
 
 @router.post("/{dataset_id}/fetch-images")

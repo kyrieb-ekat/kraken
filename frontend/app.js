@@ -98,7 +98,7 @@ async function loadDatasets() {
       </tr></thead>
       <tbody>
         ${datasets.map(ds => `
-          <tr>
+          <tr id="dataset-row-${ds.id}">
             <td>${ds.name}</td>
             <td>${ds.folio_count}</td>
             <td>
@@ -107,10 +107,39 @@ async function loadDatasets() {
               &nbsp;${badge("pending")} ${ds.image_status.pending}
             </td>
             <td class="text-muted">${new Date(ds.uploaded_at).toLocaleString()}</td>
-            <td><button class="btn btn-secondary btn-sm" onclick="showFolios(${ds.id}, '${ds.name}')">View Folios</button></td>
+            <td class="row-actions">
+              <button class="btn btn-secondary btn-sm" onclick="showFolios(${ds.id}, '${ds.name}')">View Folios</button>
+              <button class="btn btn-danger btn-sm" id="ds-delete-${ds.id}" onclick="deleteDataset(${ds.id}, '${ds.name.replace(/'/g, "\\'")}', this)">🗑</button>
+            </td>
           </tr>`).join("")}
       </tbody>
     </table>`;
+}
+
+async function deleteDataset(id, name, btn) {
+  if (btn.dataset.confirming) {
+    btn.textContent = "🗑";
+    delete btn.dataset.confirming;
+    clearTimeout(btn._confirmTimer);
+    try {
+      await api("DELETE", `/datasets/${id}`);
+      document.getElementById(`dataset-row-${id}`)?.remove();
+      if (activeDatasetId === id) {
+        activeDatasetId = null;
+        document.getElementById("folios-panel").style.display = "none";
+      }
+    } catch (err) {
+      alert(`Delete failed: ${err.message}`);
+      loadDatasets();
+    }
+  } else {
+    btn.textContent = "Sure?";
+    btn.dataset.confirming = "1";
+    btn._confirmTimer = setTimeout(() => {
+      btn.textContent = "🗑";
+      delete btn.dataset.confirming;
+    }, 4000);
+  }
 }
 
 async function showFolios(datasetId, name) {
