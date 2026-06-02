@@ -1780,11 +1780,15 @@ async function populateTrainingSelects() {
   const datasets = await api("GET", "/datasets");
   const models = await api("GET", "/models");
 
-  ["compile-dataset-select", "train-dataset-select"].forEach(id => {
-    const sel = document.getElementById(id);
-    sel.innerHTML = '<option value="">— Select dataset —</option>' +
-      datasets.map(d => `<option value="${d.id}">${d.name}</option>`).join("");
-  });
+  // Compile select: show all datasets, mark compiled ones
+  const compileSel = document.getElementById("compile-dataset-select");
+  compileSel.innerHTML = '<option value="">— Select dataset —</option>' +
+    datasets.map(d => `<option value="${d.id}">${d.name}${d.compiled ? " ✓ compiled" : ""}</option>`).join("");
+
+  // Train select: only compiled datasets are usable; grey out the rest
+  const trainSel = document.getElementById("train-dataset-select");
+  trainSel.innerHTML = '<option value="">— Select dataset —</option>' +
+    datasets.map(d => `<option value="${d.id}" ${d.compiled ? "" : "disabled"}>${d.name}${d.compiled ? " ✓ compiled" : " (not compiled)"}</option>`).join("");
 
   const baseModel = document.getElementById("train-base-model");
   baseModel.innerHTML = '<option value="">Train from scratch</option>' +

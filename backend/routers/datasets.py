@@ -44,15 +44,20 @@ async def upload_csv(file: UploadFile = File(...), db: Session = Depends(get_db)
 
 @router.get("")
 def list_datasets(db: Session = Depends(get_db)):
+    from pathlib import Path
+    compiled_dir = Path(__file__).parent.parent.parent / "data" / "compiled"
+
     datasets = db.query(Dataset).order_by(Dataset.uploaded_at.desc()).all()
     result = []
     for ds in datasets:
         folios = db.query(Folio).filter(Folio.dataset_id == ds.id).all()
+        arrow = compiled_dir / f"dataset_{ds.id}.arrow"
         result.append({
             "id": ds.id,
             "name": ds.name,
             "uploaded_at": ds.uploaded_at.isoformat(),
             "folio_count": len(folios),
+            "compiled": arrow.exists() and arrow.stat().st_size > 4096,
             "image_status": {
                 s: sum(1 for f in folios if f.image_status == s)
                 for s in ("pending", "downloading", "done", "failed")
