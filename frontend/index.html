@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Kraken Training Interface</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+
+<header>
+  <h1>Kraken Training Interface</h1>
+  <nav>
+    <button class="active" data-view="datasets">Datasets</button>
+    <button data-view="review">Review</button>
+    <button data-view="training">Training</button>
+    <button data-view="models">Models</button>
+  </nav>
+</header>
+
+<main>
+
+  <!-- ══════════════════ DATASETS VIEW ══════════════════ -->
+  <div id="view-datasets" class="view active">
+    <div class="datasets-layout">
+
+      <!-- Left column: upload + dataset/folio tables -->
+      <div class="datasets-main">
+
+        <div class="card">
+          <h2>Upload a Cantus CSV</h2>
+          <div class="drop-zone" id="csv-drop-zone">
+            <input type="file" id="csv-file-input" accept=".csv">
+            <p>Drop a CSV file here, or <strong>click to browse</strong></p>
+            <p class="text-muted mt-8">Expects Cantus Database export format with <code>folio</code>, <code>fulltext_ms</code>, <code>image_link</code> columns</p>
+          </div>
+          <div id="csv-upload-status" class="mt-8"></div>
+        </div>
+
+        <div class="card">
+          <h2>Datasets</h2>
+          <div id="datasets-table-wrap">
+            <div class="empty-state">No datasets yet. Upload a CSV above.</div>
+          </div>
+        </div>
+
+        <!-- Folio list panel (shown when a dataset is expanded) -->
+        <div class="card" id="folios-panel" style="display:none">
+          <div class="flex-row" style="justify-content:space-between; margin-bottom:12px;">
+            <h2 id="folios-panel-title">Folios</h2>
+            <div class="flex-row">
+              <button class="btn btn-primary btn-sm" id="btn-fetch-images">Download Images</button>
+              <label class="btn btn-secondary btn-sm">
+                Upload ZIP
+                <input type="file" id="zip-upload-input" accept=".zip" style="display:none">
+              </label>
+            </div>
+          </div>
+          <div class="flex-row" style="margin-bottom:10px; justify-content:space-between; align-items:center;">
+            <div id="folios-pagination-info" class="text-muted"></div>
+            <div class="flex-row">
+              <label class="text-muted" style="font-size:0.83rem;">Rows:</label>
+              <select id="folio-page-size" style="width:80px">
+                <option value="20">20</option>
+                <option value="50">50</option>
+                <option value="100">100</option>
+                <option value="500">500</option>
+              </select>
+              <button class="btn btn-secondary btn-sm" id="btn-folio-prev">&#8592; Prev</button>
+              <button class="btn btn-secondary btn-sm" id="btn-folio-next">Next &#8594;</button>
+            </div>
+          </div>
+          <div id="folios-table-wrap"></div>
+        </div>
+
+      </div><!-- /datasets-main -->
+
+      <!-- Right column: workflow guide -->
+      <aside class="workflow-guide card">
+        <h2>How to train a model</h2>
+        <ol class="workflow-steps">
+
+          <li class="workflow-step" id="wf-step-1">
+            <div class="wf-step-header">
+              <span class="wf-step-num">1</span>
+              <span class="wf-step-title">Upload a CSV</span>
+            </div>
+            <p>Drop a <strong>Cantus Database export</strong> (.csv) into the upload zone on the left. The app will read each row's folio label, manuscript image URL, and transcription text, grouping them by page.</p>
+          </li>
+
+          <li class="workflow-step" id="wf-step-2">
+            <div class="wf-step-header">
+              <span class="wf-step-num">2</span>
+              <span class="wf-step-title">Fetch page images</span>
+            </div>
+            <p>Click <strong>View Folios</strong> next to your dataset, then <strong>Download Images</strong>. The app will download each manuscript page from the URLs in the CSV. If a download fails (e.g. restricted access), use the <strong>Upload Image</strong> button that appears next to that folio, or upload a <strong>ZIP</strong> of images all at once.</p>
+            <p class="wf-tip">Tip: filenames in the ZIP should match the folio label (e.g. <code>001v.png</code>).</p>
+          </li>
+
+          <li class="workflow-step" id="wf-step-3">
+            <div class="wf-step-header">
+              <span class="wf-step-num">3</span>
+              <span class="wf-step-title">Review &amp; correct transcriptions</span>
+              <span class="wf-step-nav" onclick="switchView('review')">Go to Review &#8594;</span>
+            </div>
+            <p>Switch to the <strong>Review</strong> tab. Select your dataset and a folio, then click <strong>Segment Page</strong>. Kraken will detect individual lines of text on the page.</p>
+            <p>Each detected line appears with a suggested transcription drawn from the CSV. Because one CSV row (chant) can span several physical lines, you may need to:</p>
+            <ul class="wf-list">
+              <li><strong>Edit</strong> a line's text directly in the text box.</li>
+              <li><strong>Split</strong> a line if a new chant begins mid-line — click "Split" and then click the split point on the image.</li>
+              <li><strong>Merge</strong> two lines if a single chant was split across them — select both and click "Merge Selected".</li>
+              <li><strong>Delete</strong> a line if Kraken detected a ruling or decoration rather than text.</li>
+              <li><strong>Add</strong> a line by dragging a box on the page image if Kraken missed one.</li>
+            </ul>
+            <p>When a line's transcription is correct, tick <strong>Confirmed</strong>. Use <strong>Confirm All</strong> once a whole folio looks good.</p>
+          </li>
+
+          <li class="workflow-step" id="wf-step-4">
+            <div class="wf-step-header">
+              <span class="wf-step-num">4</span>
+              <span class="wf-step-title">Compile &amp; train</span>
+              <span class="wf-step-nav" onclick="switchView('training')">Go to Training &#8594;</span>
+            </div>
+            <p>Switch to the <strong>Training</strong> tab. First, click <strong>Compile GT</strong> to package all confirmed lines into a training archive. Then fill in a run name and epoch count, choose an optional base model to fine-tune from, and click <strong>Start Training</strong>.</p>
+            <p>The live log panel streams Kraken's output in real time. You can stop a run at any time and resume later from a checkpoint.</p>
+          </li>
+
+          <li class="workflow-step" id="wf-step-5">
+            <div class="wf-step-header">
+              <span class="wf-step-num">5</span>
+              <span class="wf-step-title">Download your model</span>
+              <span class="wf-step-nav" onclick="switchView('models')">Go to Models &#8594;</span>
+            </div>
+            <p>Once training finishes, go to the <strong>Models</strong> tab. Your trained <code>.mlmodel</code> file will be listed there and available to download. You can also select it as a base model for future fine-tuning runs.</p>
+          </li>
+
+        </ol>
+      </aside>
+
+    </div><!-- /datasets-layout -->
+  </div>
+
+  <!-- ══════════════════ REVIEW VIEW ══════════════════ -->
+  <div id="view-review" class="view">
+
+    <div class="folio-select-row">
+      <select id="review-dataset-select" style="width:220px">
+        <option value="">— Select dataset —</option>
+      </select>
+      <select id="review-folio-select" style="width:200px" disabled>
+        <option value="">— Select folio —</option>
+      </select>
+      <button class="btn btn-primary btn-sm" id="btn-segment" disabled>Segment Page</button>
+      <button class="btn btn-secondary btn-sm" id="btn-confirm-all" disabled>Confirm All</button>
+      <span id="review-status" class="text-muted"></span>
+    </div>
+
+    <div id="review-container" style="display:none">
+      <!-- Left: page image with overlay -->
+      <div id="page-image-panel" class="card" style="padding:10px">
+        <div class="flex-row" style="margin-bottom:8px; justify-content:space-between; flex-wrap:wrap; gap:6px;">
+          <h2 id="review-folio-heading">Folio</h2>
+          <div class="flex-row" style="gap:4px; flex-wrap:wrap;">
+            <button class="btn btn-secondary btn-sm" id="btn-zoom-out" title="Zoom out (scroll wheel also works)">−</button>
+            <span id="zoom-level" class="text-muted" style="font-size:0.8rem; min-width:3.2em; text-align:center; line-height:28px;">100%</span>
+            <button class="btn btn-secondary btn-sm" id="btn-zoom-in" title="Zoom in">+</button>
+            <button class="btn btn-secondary btn-sm" id="btn-zoom-reset" title="Reset zoom and pan">Fit</button>
+            <span style="width:1px; background:var(--border); align-self:stretch; margin:0 2px;"></span>
+            <div class="color-picker-wrap">
+              <button id="btn-overlay-color" class="overlay-color-btn" title="Change overlay polygon colour"></button>
+              <div id="overlay-color-picker" class="overlay-color-popover"></div>
+            </div>
+            <button class="btn btn-secondary btn-sm" id="btn-add-line">+ Add Line</button>
+            <span id="add-line-hint" class="text-muted" style="display:none; font-size:0.8rem;"></span>
+          </div>
+        </div>
+        <div id="page-canvas-wrap">
+          <div id="page-transform-root">
+            <img id="page-canvas" alt="Manuscript page" draggable="false">
+            <svg id="seg-overlay" xmlns="http://www.w3.org/2000/svg"></svg>
+          </div>
+        </div>
+      </div>
+
+      <!-- Right: line list column + text pool column -->
+      <div id="right-panel">
+        <div id="line-list-card" class="card">
+          <div class="flex-row" style="justify-content:space-between; margin-bottom:8px; flex-wrap:wrap; gap:6px;">
+            <h2>Lines (<span id="line-count">0</span>)</h2>
+            <div class="flex-row" style="flex-wrap:wrap; gap:4px;">
+              <select id="line-sort-select" title="Sort lines">
+                <option value="number">Sort: Number</option>
+                <option value="unconfirmed">Sort: Unconfirmed first</option>
+                <option value="confirmed">Sort: Confirmed first</option>
+              </select>
+              <button class="btn btn-secondary btn-sm" id="btn-collapse-all">Collapse All</button>
+              <button class="btn btn-secondary btn-sm" id="btn-renumber" title="Renumber lines sequentially from 1">Renumber</button>
+              <button class="btn btn-secondary btn-sm" id="btn-merge-selected" disabled>Merge Selected</button>
+            </div>
+          </div>
+          <div id="line-list"></div>
+        </div>
+        <div id="text-pool-panel" class="card">
+          <div id="pool-resize-handle" title="Drag to resize width"></div>
+          <div id="pool-resize-height-handle" title="Drag to resize height"></div>
+          <h2>Text Pool <span class="pool-count-label">(<span id="pool-count">0</span>)</span></h2>
+          <div id="text-pool-list"></div>
+        </div>
+      </div>
+    </div>
+
+    <div id="review-empty" class="empty-state">
+      <p>Select a dataset and folio to begin reviewing transcriptions.</p>
+    </div>
+  </div>
+
+  <!-- ══════════════════ TRAINING VIEW ══════════════════ -->
+  <div id="view-training" class="view">
+
+    <div class="card">
+      <h2>Compile Ground Truth</h2>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Dataset</label>
+          <select id="compile-dataset-select">
+            <option value="">— Select dataset —</option>
+          </select>
+        </div>
+        <button class="btn btn-primary" id="btn-compile">Compile GT</button>
+      </div>
+      <p class="text-muted">Writes <code>.gt.txt</code> files for all confirmed lines, then runs <code>ketos compile</code> to produce an <code>.arrow</code> training archive.</p>
+      <div id="compile-status" class="mt-8"></div>
+    </div>
+
+    <div class="card">
+      <h2>Start Training Run</h2>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Dataset (compiled)</label>
+          <select id="train-dataset-select">
+            <option value="">— Select dataset —</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Run name</label>
+          <input type="text" id="train-output-name" placeholder="my_model_v1">
+        </div>
+        <div class="form-group" style="max-width:100px">
+          <label>Epochs</label>
+          <input type="number" id="train-epochs" value="50" min="1" max="1000">
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Base model (optional — fine-tune from existing)</label>
+          <select id="train-base-model">
+            <option value="">Train from scratch</option>
+          </select>
+        </div>
+        <button class="btn btn-primary" id="btn-start-train">Start Training</button>
+        <button class="btn btn-danger" id="btn-stop-train" disabled>Stop</button>
+      </div>
+      <div id="train-status" class="mt-8"></div>
+    </div>
+
+    <div class="card">
+      <div class="flex-row" style="justify-content:space-between; margin-bottom:8px;">
+        <h2>Live Log</h2>
+        <span id="active-job-badge"></span>
+      </div>
+      <div id="log-box">Waiting for training to start…</div>
+    </div>
+
+    <div class="card">
+      <h2>Recent Jobs</h2>
+      <div id="jobs-table-wrap">
+        <div class="empty-state">No jobs yet.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════ MODELS VIEW ══════════════════ -->
+  <div id="view-models" class="view">
+    <div class="card">
+      <div class="flex-row" style="justify-content:space-between; margin-bottom:12px;">
+        <h2>Trained Models</h2>
+        <button class="btn btn-secondary btn-sm" onclick="loadModels()">Refresh</button>
+      </div>
+      <div id="models-table-wrap">
+        <div class="empty-state">No models found.</div>
+      </div>
+    </div>
+  </div>
+
+</main>
+
+<script src="/app.js"></script>
+</body>
+</html>
