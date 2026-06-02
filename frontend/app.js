@@ -717,17 +717,35 @@ async function loadReviewFolio(folioId) {
   }
 
   // Prepend last chant from previous folio to text pool (for continuity)
-  const currentFolioIndex = _allFoliosForDataset.findIndex(f => f.id === folioId);
-  if (currentFolioIndex > 0) {
+  let currentFolioIndex = _allFoliosForDataset.findIndex(f => f.id === folioId);
+
+  // If folio list not populated, try to fetch it from the current dataset
+  if (_allFoliosForDataset.length === 0 && document.getElementById("review-dataset-select").value) {
+    const dsId = document.getElementById("review-dataset-select").value;
+    const folios = await api("GET", `/datasets/${dsId}/folios`).catch(() => []);
+    if (folios.length > 0) {
+      _allFoliosForDataset = folios.sort((a, b) => {
+        const aNum = parseInt(a.folio_label) || 0;
+        const bNum = parseInt(b.folio_label) || 0;
+        if (aNum !== bNum) return aNum - bNum;
+        return a.folio_label.localeCompare(b.folio_label);
+      });
+      currentFolioIndex = _allFoliosForDataset.findIndex(f => f.id === folioId);
+    }
+  }
+
+  if (currentFolioIndex > 0 && _allFoliosForDataset.length > 0) {
     const prevFolio = _allFoliosForDataset[currentFolioIndex - 1];
     try {
       const prevData = await api("GET", `/folios/${prevFolio.id}/text-pool`);
-      if (prevData.text_pool && prevData.text_pool.length > 0) {
+      if (prevData && prevData.text_pool && prevData.text_pool.length > 0) {
         const lastChant = prevData.text_pool[prevData.text_pool.length - 1];
-        currentFolioData.text_pool.unshift(`← ${lastChant}`);
+        if (currentFolioData.text_pool) {
+          currentFolioData.text_pool.unshift(`← ${lastChant}`);
+        }
       }
     } catch (err) {
-      // silently ignore if can't fetch previous folio
+      console.error("Failed to fetch previous folio's text pool:", err);
     }
   }
 
