@@ -1747,7 +1747,18 @@ document.getElementById("btn-compile").addEventListener("click", async () => {
   setStatus("compile-status", "Compiling…");
   try {
     const data = await api("POST", `/training/compile/${dsId}`);
-    setStatus("compile-status", `Job ${data.job_id}: ${data.status}`, data.status === "done" ? "success" : "info");
+    if (data.status === "done") {
+      setStatus("compile-status", `Job ${data.job_id}: compiled successfully.`, "success");
+    } else {
+      const el = document.getElementById("compile-status");
+      el.textContent = `Job ${data.job_id}: failed. `;
+      el.className = "status error";
+      const btn = document.createElement("button");
+      btn.className = "btn btn-secondary btn-sm";
+      btn.textContent = "View log";
+      btn.onclick = () => startLogStream(data.job_id, "failed");
+      el.appendChild(btn);
+    }
     loadJobs();
   } catch (err) {
     setStatus("compile-status", `Error: ${err.message}`, "error");
@@ -1786,17 +1797,22 @@ document.getElementById("btn-stop-train").addEventListener("click", async () => 
   document.getElementById("btn-start-train").disabled = false;
 });
 
-function startLogStream(jobId) {
+function startLogStream(jobId, knownStatus) {
   if (logEventSource) logEventSource.close();
   const logBox = document.getElementById("log-box");
   logBox.textContent = "";
-  document.getElementById("active-job-badge").innerHTML = badge("running") + ` Job #${jobId}`;
+  document.getElementById("active-job-badge").innerHTML = badge(knownStatus || "running") + ` Job #${jobId}`;
+  // Scroll training section into view so the user sees the log
+  document.getElementById("log-box").scrollIntoView({ behavior: "smooth", block: "nearest" });
 
   logEventSource = new EventSource(`/training/jobs/${jobId}/logs`);
   logEventSource.onmessage = (e) => {
     if (e.data === "[DONE]") {
       logEventSource.close();
-      document.getElementById("active-job-badge").innerHTML = badge("done") + ` Job #${jobId}`;
+      // Keep the known status badge rather than always showing "done"
+      if (!knownStatus || knownStatus === "running") {
+        document.getElementById("active-job-badge").innerHTML = badge("done") + ` Job #${jobId}`;
+      }
       document.getElementById("btn-stop-train").disabled = true;
       document.getElementById("btn-start-train").disabled = false;
       loadJobs();
@@ -1827,9 +1843,9 @@ async function loadJobs() {
             <td>${j.dataset_id || "—"}</td>
             <td class="text-muted">${j.started_at ? new Date(j.started_at).toLocaleString() : "—"}</td>
             <td class="text-muted">${j.finished_at ? new Date(j.finished_at).toLocaleString() : "—"}</td>
-            <td>${j.status === "running"
-              ? `<button class="btn btn-secondary btn-sm" onclick="startLogStream(${j.id})">View logs</button>`
-              : (j.status === "done" ? `<button class="btn btn-secondary btn-sm" onclick="startLogStream(${j.id})">Replay logs</button>` : "")
+            <td>${j.log_path
+              ? `<button class="btn btn-secondary btn-sm" onclick="startLogStream(${j.id}, '${j.status}')">${j.status === "running" ? "View logs" : j.status === "failed" ? "View error log" : "Replay logs"}</button>`
+              : ""
             }</td>
           </tr>`).join("")}
       </tbody>

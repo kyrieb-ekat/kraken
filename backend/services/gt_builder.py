@@ -1,4 +1,3 @@
-import asyncio
 import shutil
 from datetime import datetime
 from pathlib import Path
@@ -12,15 +11,17 @@ COMPILED_DIR = Path(__file__).parent.parent.parent / "data" / "compiled"
 
 
 def write_gt_files(dataset_id: int, db: Session) -> list[Path]:
-    """Write .gt.txt + symlinked image for every confirmed Line in the dataset."""
-    folios = db.query(Folio).filter(Folio.dataset_id == dataset_id).all()
-    folio_ids = [f.id for f in folios]
+    """Write .gt.txt + copied image for every confirmed Line in the dataset.
 
-    written = []
-    for folio_id in folio_ids:
+    Returns the list of image paths written (each has a .gt.txt sibling).
+    """
+    folios = db.query(Folio).filter(Folio.dataset_id == dataset_id).all()
+
+    written: list[Path] = []
+    for folio in folios:
         lines = (
             db.query(Line)
-            .filter(Line.folio_id == folio_id, Line.confirmed == True)
+            .filter(Line.folio_id == folio.id, Line.confirmed == True)
             .order_by(Line.line_index)
             .all()
         )
@@ -31,71 +32,59 @@ def write_gt_files(dataset_id: int, db: Session) -> list[Path]:
             if not crop.exists():
                 continue
 
-            gt_dir = GT_DIR / str(folio_id)
+            gt_dir = GT_DIR / str(folio.id)
             gt_dir.mkdir(parents=True, exist_ok=True)
 
             gt_img = gt_dir / crop.name
             gt_txt = gt_dir / (crop.stem + ".gt.txt")
 
-            # Hard-link or copy image next to .gt.txt
             if not gt_img.exists():
                 shutil.copy2(crop, gt_img)
 
             gt_txt.write_text(line.transcription, encoding="utf-8")
-            written.append(gt_txt)
+            written.append(gt_img)
 
     return written
 
 
-async def compile_dataset(dataset_id: int, db: Session) -> Job:
-    """Write GT files then run `ketos compile` to produce an .arrow file."""
-    gt_files = write_gt_files(dataset_id, db)
-    if not gt_files:
+def compile_dataset(dataset_id: int, db: Session) -> Job:
+    """Write GT files and record a manifest of image paths for training.
+
+    No ketos subprocess is needed here — modern kraken accepts image files
+    directly via `ketos train -f path`, which discovers .gt.txt siblings
+    automatically.  The manifest file (dataset_<id>.txt) is what the trainer
+    reads when a training run is started.
+    """
+    img_files = write_gt_files(dataset_id, db)
+    if not img_files:
         raise ValueError("No confirmed lines with transcriptions found")
 
     COMPILED_DIR.mkdir(parents=True, exist_ok=True)
-    arrow_out = COMPILED_DIR / f"dataset_{dataset_id}.arrow"
 
-    job = Job(type="compile", status="running", dataset_id=dataset_id,
-              started_at=datetime.utcnow())
+    # Write a plain manifest so the trainer knows which images to use
+    manifest = COMPILED_DIR / f"dataset_{dataset_id}.txt"
+    manifest.write_text("\n".join(str(p) for p in img_files), encoding="utf-8")
+
+    job = Job(
+        type="compile",
+        status="done",
+        dataset_id=dataset_id,
+        started_at=datetime.utcnow(),
+        finished_at=datetime.utcnow(),
+        model_path=str(manifest),
+    )
     db.add(job)
     db.commit()
     db.refresh(job)
 
     log_path = COMPILED_DIR / f"compile_{job.id}.log"
+    log_path.write_text(
+        f"Ground truth prepared: {len(img_files)} confirmed lines\n"
+        f"Manifest: {manifest}\n\n"
+        + "\n".join(str(p) for p in img_files),
+        encoding="utf-8",
+    )
     job.log_path = str(log_path)
     db.commit()
 
-    # Build file list: ketos compile accepts image files and discovers .gt.txt siblings
-    img_files = [str(p).replace(".gt.txt", ".png") for p in gt_files
-                 if Path(str(p).replace(".gt.txt", ".png")).exists()]
-
-    cmd = [
-        "ketos", "compile",
-        "--random-split", "0.9", "0.05", "0.05",
-        "-o", str(arrow_out),
-        *img_files,
-    ]
-
-    try:
-        proc = await asyncio.create_subprocess_exec(
-            *cmd,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.STDOUT,
-        )
-        stdout, _ = await proc.communicate()
-        log_path.write_bytes(stdout)
-
-        if proc.returncode == 0:
-            job.status = "done"
-            job.model_path = str(arrow_out)
-        else:
-            job.status = "failed"
-    except Exception as exc:
-        log_path.write_text(str(exc))
-        job.status = "failed"
-
-    job.finished_at = datetime.utcnow()
-    db.commit()
-    db.refresh(job)
     return job
