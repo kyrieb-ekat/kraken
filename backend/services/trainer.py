@@ -122,12 +122,67 @@ async def _stream_to_file(
     if job:
         if proc.returncode == 0:
             job.status = "done"
+            # For segtrain jobs, convert the last checkpoint to a weights file.
+            # ketos segtrain saves its "best" checkpoint based on val_mean_iu,
+            # which plateaus early while val_bl_f1 (the metric that actually
+            # measures baseline detection quality) keeps improving. Converting
+            # the most recently written checkpoint gives us the model with the
+            # best bl_f1.
+            if job.type == "segtrain":
+                extra = job.get_extra()
+                output_name = extra.get("output_name")
+                if output_name:
+                    asyncio.create_task(_convert_last_seg_checkpoint(
+                        MODELS_DIR / output_name / "seg_model", log_path
+                    ))
         elif proc.returncode == -signal.SIGTERM or job.status == "stopped":
             job.status = "stopped"
         else:
             job.status = "failed"
         job.finished_at = datetime.utcnow()
         db.commit()
+
+
+async def _convert_last_seg_checkpoint(model_dir: Path, log_path: Path) -> None:
+    """Convert the most recently written segtrain checkpoint to a weights file.
+
+    ketos segtrain scores checkpoints by val_mean_iu, which often plateaus at
+    epoch 2 while val_bl_f1 keeps improving. The "best_*.safetensors" it saves
+    automatically is therefore usually the epoch-2 model — not the one with
+    the highest bl_f1. This function finds the newest .ckpt and converts it,
+    saving it as 'last_epoch.mlmodel' so users can select it in the Review tab.
+    """
+    import asyncio as _asyncio
+
+    # Wait a moment to make sure the checkpoint file is fully written
+    await _asyncio.sleep(2)
+
+    ckpts = [p for p in model_dir.glob("checkpoint_*.ckpt")
+             if "abort" not in p.name]
+    if not ckpts:
+        return
+
+    last_ckpt = max(ckpts, key=lambda p: p.stat().st_mtime)
+    out_path = model_dir / "last_epoch.mlmodel"
+
+    # Use a subprocess so we don't import PyTorch into the FastAPI process
+    script = f"""
+import warnings
+warnings.filterwarnings('ignore')
+from kraken.train import BLLASegmentationModel
+model = BLLASegmentationModel.load_from_checkpoint('{last_ckpt}', weights_only=False)
+model.net.save_model('{out_path}')
+print('Converted last checkpoint to', '{out_path}')
+"""
+    proc = await asyncio.create_subprocess_exec(
+        "python", "-c", script,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.STDOUT,
+    )
+    stdout, _ = await proc.communicate()
+    with open(log_path, "ab") as f:
+        f.write(b"\n--- last-epoch conversion ---\n")
+        f.write(stdout)
 
 
 async def stream_logs(job_id: int, db: Session) -> AsyncIterator[str]:
