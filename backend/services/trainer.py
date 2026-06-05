@@ -24,6 +24,7 @@ async def start_training(
     dataset_id: int,
     output_name: str,
     epochs: int,
+    patience: int,
     base_model: str | None,
     db: Session,
 ) -> Job:
@@ -57,16 +58,21 @@ async def start_training(
     # single-process data loading.  With workers > 0, PyTorch tries to pickle
     # kraken's transform lambdas across process boundaries and fails with
     # "Can't pickle local object resize_transform".
+    # patience > 0 → early stopping (quit=early), epochs is the ceiling.
+    # patience = 0 → run exactly `epochs` epochs (quit=fixed).
     cmd = [
         "ketos", "--workers", "0",
         "train",
         "-f", "binary",
         "-o", str(model_out / "model"),
         "-p", "0.9",
+        "-N", str(epochs),
     ]
 
-    if epochs > 0:
-        cmd += ["-q", "fixed", "-N", str(epochs)]
+    if patience > 0:
+        cmd += ["-q", "early", "--lag", str(patience)]
+    else:
+        cmd += ["-q", "fixed"]
 
     if base_model:
         cmd += ["--load", base_model]
@@ -166,6 +172,7 @@ async def start_segtrain(
     dataset_id: int,
     output_name: str,
     epochs: int,
+    patience: int,
     base_model: str | None,
     db: Session,
 ) -> Job:
@@ -207,6 +214,11 @@ async def start_segtrain(
         "-p", "0.9",
         "-N", str(epochs),
     ]
+
+    if patience > 0:
+        cmd += ["-q", "early", "--lag", str(patience)]
+    else:
+        cmd += ["-q", "fixed"]
 
     if base_model:
         cmd += ["--load", base_model]

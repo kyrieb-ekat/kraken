@@ -31,6 +31,7 @@ class TrainRequest(BaseModel):
     dataset_id: int
     output_name: str
     epochs: int = 50
+    patience: int = 0   # 0 = fixed epochs; >0 = early stopping with this lag
     base_model: str | None = None
 
 
@@ -41,6 +42,7 @@ async def start_training(body: TrainRequest, db: Session = Depends(get_db)):
             dataset_id=body.dataset_id,
             output_name=body.output_name,
             epochs=body.epochs,
+            patience=body.patience,
             base_model=body.base_model,
             db=db,
         )
@@ -103,6 +105,7 @@ class SegTrainRequest(BaseModel):
     dataset_id: int
     output_name: str
     epochs: int = 50
+    patience: int = 0
     base_model: str | None = None
 
 
@@ -113,6 +116,7 @@ async def start_seg_training(body: SegTrainRequest, db: Session = Depends(get_db
             dataset_id=body.dataset_id,
             output_name=body.output_name,
             epochs=body.epochs,
+            patience=body.patience,
             base_model=body.base_model,
             db=db,
         )

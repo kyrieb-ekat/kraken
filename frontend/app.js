@@ -1876,10 +1876,11 @@ document.getElementById("btn-compile-seg").addEventListener("click", async () =>
 
 function _trainInputs() {
   return {
-    dsId:   document.getElementById("train-dataset-select").value,
-    name:   document.getElementById("train-output-name").value.trim(),
-    epochs: parseInt(document.getElementById("train-epochs").value),
-    base:   document.getElementById("train-base-model").value,
+    dsId:    document.getElementById("train-dataset-select").value,
+    name:    document.getElementById("train-output-name").value.trim(),
+    epochs:  parseInt(document.getElementById("train-epochs").value),
+    patience: parseInt(document.getElementById("train-patience").value) || 0,
+    base:    document.getElementById("train-base-model").value,
     segBase: document.getElementById("seg-train-base-model").value,
   };
 }
@@ -1891,33 +1892,33 @@ function _setTrainButtons(running) {
   document.getElementById("btn-stop-train").disabled = !running;
 }
 
-async function _launchHTR(dsId, name, epochs, base) {
+async function _launchHTR(dsId, name, epochs, patience, base) {
   const datasets = await api("GET", "/datasets");
   const ds = datasets.find(d => d.id === parseInt(dsId));
   if (!ds || !ds.compiled) throw new Error("Dataset has not been compiled for HTR — run Compile Recognition GT first.");
   return api("POST", "/training/start", {
     dataset_id: parseInt(dsId), output_name: name,
-    epochs, base_model: base || null,
+    epochs, patience, base_model: base || null,
   });
 }
 
-async function _launchSeg(dsId, name, epochs, segBase) {
+async function _launchSeg(dsId, name, epochs, patience, segBase) {
   const datasets = await api("GET", "/datasets");
   const ds = datasets.find(d => d.id === parseInt(dsId));
   if (!ds || !ds.seg_compiled) throw new Error("Dataset has not been compiled for segmentation — run Compile Seg GT first.");
   return api("POST", "/training/start-seg", {
     dataset_id: parseInt(dsId), output_name: name,
-    epochs, base_model: segBase || null,
+    epochs, patience, base_model: segBase || null,
   });
 }
 
 // HTR only
 document.getElementById("btn-start-train").addEventListener("click", async () => {
-  const { dsId, name, epochs, base } = _trainInputs();
+  const { dsId, name, epochs, patience, base } = _trainInputs();
   if (!dsId || !name) { setStatus("train-status", "Dataset and run name are required.", "error"); return; }
   setStatus("train-status", "Starting HTR training…");
   try {
-    const data = await _launchHTR(dsId, name, epochs, base);
+    const data = await _launchHTR(dsId, name, epochs, patience, base);
     setStatus("train-status", `HTR job ${data.job_id} started.`, "success");
     activeJobId = data.job_id;
     _setTrainButtons(true);
@@ -1929,11 +1930,11 @@ document.getElementById("btn-start-train").addEventListener("click", async () =>
 
 // Segmentation only
 document.getElementById("btn-start-segtrain").addEventListener("click", async () => {
-  const { dsId, name, epochs, segBase } = _trainInputs();
+  const { dsId, name, epochs, patience, segBase } = _trainInputs();
   if (!dsId || !name) { setStatus("train-status", "Dataset and run name are required.", "error"); return; }
   setStatus("train-status", "Starting segmentation training…");
   try {
-    const data = await _launchSeg(dsId, name, epochs, segBase);
+    const data = await _launchSeg(dsId, name, epochs, patience, segBase);
     setStatus("train-status", `Seg job ${data.job_id} started.`, "success");
     activeJobId = data.job_id;
     _setTrainButtons(true);
@@ -1945,11 +1946,11 @@ document.getElementById("btn-start-segtrain").addEventListener("click", async ()
 
 // Both — HTR first, then seg automatically when HTR finishes
 document.getElementById("btn-start-both").addEventListener("click", async () => {
-  const { dsId, name, epochs, base, segBase } = _trainInputs();
+  const { dsId, name, epochs, patience, base, segBase } = _trainInputs();
   if (!dsId || !name) { setStatus("train-status", "Dataset and run name are required.", "error"); return; }
   setStatus("train-status", "Starting HTR training… (segmentation will follow automatically)");
   try {
-    const htrData = await _launchHTR(dsId, name, epochs, base);
+    const htrData = await _launchHTR(dsId, name, epochs, patience, base);
     activeJobId = htrData.job_id;
     _setTrainButtons(true);
     startLogStream(htrData.job_id);
@@ -1967,7 +1968,7 @@ document.getElementById("btn-start-both").addEventListener("click", async () => 
       }
       setStatus("train-status", "HTR done — starting segmentation training…", "info");
       try {
-        const segData = await _launchSeg(dsId, name, epochs, segBase);
+        const segData = await _launchSeg(dsId, name, epochs, patience, segBase);
         setStatus("train-status", `Seg job ${segData.job_id} started.`, "success");
         activeJobId = segData.job_id;
         startLogStream(segData.job_id);

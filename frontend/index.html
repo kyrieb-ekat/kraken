@@ -253,18 +253,22 @@
           <input type="text" id="train-output-name" placeholder="manuscript_v1">
         </div>
         <div class="form-group" style="max-width:100px">
-          <label>Epochs</label>
-          <input type="number" id="train-epochs" value="50" min="1" max="1000">
+          <label>Max epochs</label>
+          <input type="number" id="train-epochs" value="50" min="1" max="2000">
+        </div>
+        <div class="form-group" style="max-width:100px">
+          <label title="Validation passes with no improvement before stopping early. 0 = run all epochs.">Patience</label>
+          <input type="number" id="train-patience" value="0" min="0" max="100">
         </div>
       </div>
       <div class="form-row">
-        <div class="form-group">
+        <div class="form-group" style="max-width:220px">
           <label>Base HTR model (optional)</label>
           <select id="train-base-model">
             <option value="">Train from scratch</option>
           </select>
         </div>
-        <div class="form-group">
+        <div class="form-group" style="max-width:220px">
           <label>Base seg model (optional)</label>
           <select id="seg-train-base-model">
             <option value="">Train from scratch</option>
