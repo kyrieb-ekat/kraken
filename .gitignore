@@ -6,6 +6,7 @@ __pycache__/
 data/images/
 data/lines/
 data/gt/
+data/seg_gt/
 data/compiled/
 data/models/
 data/logs/
