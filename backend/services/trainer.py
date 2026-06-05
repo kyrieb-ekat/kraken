@@ -1,6 +1,7 @@
 import asyncio
 import os
 import signal
+import sys
 from datetime import datetime
 from pathlib import Path
 from typing import AsyncIterator
@@ -10,6 +11,9 @@ from sqlalchemy.orm import Session
 from backend.database import Job
 
 MODELS_DIR = Path(__file__).parent.parent.parent / "data" / "models"
+# Wrapper script that patches Lightning's ModelCheckpoint (save_last=True)
+# before delegating to ketos segtrain. See segtrain_worker.py for details.
+_SEGTRAIN_WORKER = Path(__file__).parent / "segtrain_worker.py"
 COMPILED_DIR = Path(__file__).parent.parent.parent / "data" / "compiled"
 LOGS_DIR = Path(__file__).parent.parent.parent / "data" / "logs"
 
@@ -144,38 +148,40 @@ async def _stream_to_file(
 
 
 async def _convert_last_seg_checkpoint(model_dir: Path, log_path: Path) -> None:
-    """Convert the most recently written segtrain checkpoint to a weights file.
+    """Convert the last-epoch segtrain checkpoint to a weights file.
 
-    ketos segtrain scores checkpoints by val_mean_iu, which often plateaus at
-    epoch 2 while val_bl_f1 keeps improving. The "best_*.safetensors" it saves
-    automatically is therefore usually the epoch-2 model — not the one with
-    the highest bl_f1. This function finds the newest .ckpt and converts it,
-    saving it as 'last_epoch.mlmodel' so users can select it in the Review tab.
+    segtrain_worker.py patches Lightning to write 'last.ckpt' (the final
+    epoch) in addition to the top-K score-based checkpoints.  We convert
+    that file here so users get a 'last_epoch.mlmodel' in the Models tab
+    that reflects the final bl_f1, not the early-plateau IoU winner.
+
+    Falls back to the newest checkpoint_*.ckpt if last.ckpt is absent
+    (e.g. training was stopped early or the wrapper wasn't used).
     """
-    import asyncio as _asyncio
+    # Wait a moment to ensure all checkpoint files are fully flushed
+    await asyncio.sleep(2)
 
-    # Wait a moment to make sure the checkpoint file is fully written
-    await _asyncio.sleep(2)
+    # Prefer last.ckpt (written by segtrain_worker's save_last patch)
+    last_ckpt = model_dir / "last.ckpt"
+    if not last_ckpt.exists():
+        fallbacks = [p for p in model_dir.glob("checkpoint_*.ckpt")
+                     if "abort" not in p.name]
+        if not fallbacks:
+            return
+        last_ckpt = max(fallbacks, key=lambda p: p.stat().st_mtime)
 
-    ckpts = [p for p in model_dir.glob("checkpoint_*.ckpt")
-             if "abort" not in p.name]
-    if not ckpts:
-        return
-
-    last_ckpt = max(ckpts, key=lambda p: p.stat().st_mtime)
     out_path = model_dir / "last_epoch.mlmodel"
 
-    # Use a subprocess so we don't import PyTorch into the FastAPI process
-    script = f"""
-import warnings
-warnings.filterwarnings('ignore')
-from kraken.train import BLLASegmentationModel
-model = BLLASegmentationModel.load_from_checkpoint('{last_ckpt}', weights_only=False)
-model.net.save_model('{out_path}')
-print('Converted last checkpoint to', '{out_path}')
-"""
+    # Run in a subprocess to avoid pulling PyTorch weights into FastAPI
+    script = (
+        "import warnings; warnings.filterwarnings('ignore')\n"
+        "from kraken.train import BLLASegmentationModel\n"
+        f"m = BLLASegmentationModel.load_from_checkpoint('{last_ckpt}', weights_only=False)\n"
+        f"m.net.save_model('{out_path}')\n"
+        f"print('Saved last_epoch.mlmodel from', '{last_ckpt.name}')\n"
+    )
     proc = await asyncio.create_subprocess_exec(
-        "python", "-c", script,
+        sys.executable, "-c", script,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.STDOUT,
     )
@@ -263,8 +269,13 @@ async def start_segtrain(
     job.set_extra({"output_name": output_name, "epochs": epochs})
     db.commit()
 
+    # Use the segtrain_worker.py wrapper instead of ketos directly.
+    # The wrapper patches Lightning's ModelCheckpoint to add save_last=True
+    # so the final epoch is always saved as 'last.ckpt', regardless of
+    # whether val_mean_iu improved. See segtrain_worker.py for full details.
     cmd = [
-        "ketos", "--workers", "0",
+        sys.executable, str(_SEGTRAIN_WORKER),
+        "--workers", "0",
         "segtrain",
         "-f", "alto",
         "-o", str(model_out / "seg_model"),
