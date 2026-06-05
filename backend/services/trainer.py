@@ -162,6 +162,76 @@ async def stream_logs(job_id: int, db: Session) -> AsyncIterator[str]:
                 yield line.rstrip("\n")
 
 
+async def start_segtrain(
+    dataset_id: int,
+    output_name: str,
+    epochs: int,
+    base_model: str | None,
+    db: Session,
+) -> Job:
+    """Launch `ketos segtrain` using the per-folio ALTO XML manifest."""
+    manifest = COMPILED_DIR / f"seg_dataset_{dataset_id}.txt"
+    if not manifest.exists():
+        raise FileNotFoundError(
+            f"No segmentation ground truth for dataset {dataset_id}. "
+            "Run 'Compile Seg GT' first."
+        )
+
+    xml_files = [
+        line.strip()
+        for line in manifest.read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+    if not xml_files:
+        raise FileNotFoundError("Seg manifest is empty — run 'Compile Seg GT' again.")
+
+    model_out = MODELS_DIR / output_name
+    model_out.mkdir(parents=True, exist_ok=True)
+
+    job = Job(type="segtrain", status="running", dataset_id=dataset_id,
+              started_at=datetime.utcnow())
+    db.add(job)
+    db.commit()
+    db.refresh(job)
+
+    log_path = LOGS_DIR / f"segtrain_{job.id}.log"
+    job.log_path = str(log_path)
+    job.set_extra({"output_name": output_name, "epochs": epochs})
+    db.commit()
+
+    cmd = [
+        "ketos", "--workers", "0",
+        "segtrain",
+        "-f", "alto",
+        "-o", str(model_out / "seg_model"),
+        "-p", "0.9",
+        "-N", str(epochs),
+    ]
+
+    if base_model:
+        cmd += ["--load", base_model]
+
+    cmd += xml_files
+
+    env = os.environ.copy()
+    env["PYTORCH_ENABLE_MPS_FALLBACK"] = "1"
+
+    proc = await asyncio.create_subprocess_exec(
+        *cmd,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.STDOUT,
+        env=env,
+    )
+    _procs[job.id] = proc
+    job.pid = proc.pid
+    db.commit()
+
+    asyncio.create_task(_stream_to_file(proc, log_path, job.id, db))
+
+    db.refresh(job)
+    return job
+
+
 def stop_job(job_id: int, db: Session) -> bool:
     proc = _procs.get(job_id)
     if proc:

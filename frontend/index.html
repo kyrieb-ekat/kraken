@@ -150,6 +150,9 @@
       <select id="review-folio-select" style="width:200px" disabled>
         <option value="">— Select folio —</option>
       </select>
+      <select id="seg-model-select" title="Segmentation model to use" style="max-width:200px">
+        <option value="">Default seg model</option>
+      </select>
       <button class="btn btn-primary btn-sm" id="btn-segment" disabled>Segment Page</button>
       <button class="btn btn-secondary btn-sm" id="btn-confirm-all" disabled>Confirm All</button>
       <span id="review-status" class="text-muted"></span>
@@ -221,6 +224,7 @@
 
     <div class="card">
       <h2>Compile Ground Truth</h2>
+      <p class="text-muted" style="margin-bottom:10px">Gen's confirmed lines feed <em>both</em> models. Compile once to prepare training data for recognition and segmentation.</p>
       <div class="form-row">
         <div class="form-group">
           <label>Dataset</label>
@@ -228,10 +232,11 @@
             <option value="">— Select dataset —</option>
           </select>
         </div>
-        <button class="btn btn-primary" id="btn-compile">Compile GT</button>
+        <button class="btn btn-primary" id="btn-compile">Compile Recognition GT</button>
+        <button class="btn btn-secondary" id="btn-compile-seg">Compile Seg GT</button>
       </div>
-      <p class="text-muted">Writes <code>.gt.txt</code> files for all confirmed lines, then runs <code>ketos compile</code> to produce an <code>.arrow</code> training archive.</p>
       <div id="compile-status" class="mt-8"></div>
+      <div id="compile-seg-status" class="mt-8"></div>
     </div>
 
     <div class="card">
@@ -263,6 +268,38 @@
         <button class="btn btn-danger" id="btn-stop-train" disabled>Stop</button>
       </div>
       <div id="train-status" class="mt-8"></div>
+    </div>
+
+    <div class="card">
+      <h2>Train Segmentation Model</h2>
+      <p class="text-muted" style="margin-bottom:10px">Trains a line-detection model from Gen's corrected page layouts. Use the resulting model in the Review tab to improve auto-segmentation on new pages.</p>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Dataset (seg compiled)</label>
+          <select id="seg-train-dataset-select">
+            <option value="">— Select dataset —</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Run name</label>
+          <input type="text" id="seg-train-output-name" placeholder="seg_model_v1">
+        </div>
+        <div class="form-group" style="max-width:100px">
+          <label>Epochs</label>
+          <input type="number" id="seg-train-epochs" value="50" min="1" max="500">
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Base seg model (optional — fine-tune from existing)</label>
+          <select id="seg-train-base-model">
+            <option value="">Train from scratch</option>
+          </select>
+        </div>
+        <button class="btn btn-primary" id="btn-start-segtrain">Start Seg Training</button>
+        <button class="btn btn-danger" id="btn-stop-segtrain" disabled>Stop</button>
+      </div>
+      <div id="seg-train-status" class="mt-8"></div>
     </div>
 
     <div class="card">

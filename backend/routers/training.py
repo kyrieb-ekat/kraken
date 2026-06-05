@@ -86,6 +86,43 @@ async def stream_logs(job_id: int, db: Session = Depends(get_db)):
     return StreamingResponse(event_stream(), media_type="text/event-stream")
 
 
+# ── Segmentation compile + train ─────────────────────────────────────────────
+
+@router.post("/compile-seg/{dataset_id}")
+def compile_seg_gt(dataset_id: int, db: Session = Depends(get_db)):
+    try:
+        job = gt_builder.compile_seg_dataset(dataset_id, db)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
+    except Exception as exc:
+        raise HTTPException(500, str(exc))
+    return {"job_id": job.id, "status": job.status}
+
+
+class SegTrainRequest(BaseModel):
+    dataset_id: int
+    output_name: str
+    epochs: int = 50
+    base_model: str | None = None
+
+
+@router.post("/start-seg")
+async def start_seg_training(body: SegTrainRequest, db: Session = Depends(get_db)):
+    try:
+        job = await trainer.start_segtrain(
+            dataset_id=body.dataset_id,
+            output_name=body.output_name,
+            epochs=body.epochs,
+            base_model=body.base_model,
+            db=db,
+        )
+    except FileNotFoundError as exc:
+        raise HTTPException(400, str(exc))
+    except Exception as exc:
+        raise HTTPException(500, str(exc))
+    return {"job_id": job.id, "pid": job.pid, "status": job.status}
+
+
 @router.get("/jobs")
 def list_jobs(db: Session = Depends(get_db)):
     jobs = db.query(Job).order_by(Job.id.desc()).limit(50).all()

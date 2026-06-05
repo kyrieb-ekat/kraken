@@ -36,7 +36,7 @@ function switchView(name) {
   views.forEach(id => document.getElementById(`view-${id}`).classList.toggle("active", id === name));
   document.querySelectorAll("nav button").forEach(b => b.classList.toggle("active", b.dataset.view === name));
   localStorage.setItem("kraken_active_view", name);
-  if (name === "review") populateReviewDatasetSelect();
+  if (name === "review") { populateReviewDatasetSelect(); populateSegModelSelect(); }
   if (name === "training") { populateTrainingSelects(); loadJobs().then(jobs => {
     if (jobs && jobs.some(j => j.status === "running")) startJobPolling();
   }); }
@@ -689,6 +689,14 @@ async function populateReviewDatasetSelect() {
     datasets.map(d => `<option value="${d.id}">${d.name}</option>`).join("");
 }
 
+async function populateSegModelSelect() {
+  const models = await api("GET", "/models");
+  const segModels = models.filter(m => m.relative_path.includes("seg_model"));
+  const sel = document.getElementById("seg-model-select");
+  sel.innerHTML = '<option value="">Default seg model</option>' +
+    segModels.map(m => `<option value="${m.path}">${m.relative_path}</option>`).join("");
+}
+
 document.getElementById("review-dataset-select").addEventListener("change", async function() {
   const dsId = this.value;
   const folioSel = document.getElementById("review-folio-select");
@@ -719,9 +727,10 @@ document.getElementById("review-folio-select").addEventListener("change", functi
 document.getElementById("btn-segment").addEventListener("click", async () => {
   const folioId = document.getElementById("review-folio-select").value;
   if (!folioId) return;
+  const segModel = document.getElementById("seg-model-select").value || null;
   document.getElementById("review-status").textContent = "Segmenting…";
   try {
-    const data = await api("POST", `/folios/${folioId}/segment`);
+    const data = await api("POST", `/folios/${folioId}/segment`, { seg_model: segModel });
     document.getElementById("review-status").textContent = `${data.lines_created} lines detected.`;
     await loadReviewFolio(folioId);
   } catch (err) {
@@ -1793,6 +1802,22 @@ async function populateTrainingSelects() {
   const baseModel = document.getElementById("train-base-model");
   baseModel.innerHTML = '<option value="">Train from scratch</option>' +
     models.map(m => `<option value="${m.path}">${m.relative_path}</option>`).join("");
+
+  // Segmentation training selects
+  const segTrainSel = document.getElementById("seg-train-dataset-select");
+  segTrainSel.innerHTML = '<option value="">— Select dataset —</option>' +
+    datasets.map(d => `<option value="${d.id}" ${d.seg_compiled ? "" : "disabled"}>${d.name}${d.seg_compiled ? " ✓ seg compiled" : " (not seg compiled)"}</option>`).join("");
+
+  // Seg base model — only show .safetensors seg models (contain "seg_model" in path)
+  const segBaseModel = document.getElementById("seg-train-base-model");
+  const segModels = models.filter(m => m.relative_path.includes("seg_model"));
+  segBaseModel.innerHTML = '<option value="">Train from scratch</option>' +
+    segModels.map(m => `<option value="${m.path}">${m.relative_path}</option>`).join("");
+
+  // Seg model picker in Review tab
+  const segModelSel = document.getElementById("seg-model-select");
+  segModelSel.innerHTML = '<option value="">Default seg model</option>' +
+    segModels.map(m => `<option value="${m.path}">${m.relative_path}</option>`).join("");
 }
 
 document.getElementById("btn-compile").addEventListener("click", async () => {
@@ -1817,6 +1842,64 @@ document.getElementById("btn-compile").addEventListener("click", async () => {
   } catch (err) {
     setStatus("compile-status", `Error: ${err.message}`, "error");
   }
+});
+
+document.getElementById("btn-compile-seg").addEventListener("click", async () => {
+  const dsId = document.getElementById("compile-dataset-select").value;
+  if (!dsId) { setStatus("compile-seg-status", "Select a dataset first.", "error"); return; }
+  setStatus("compile-seg-status", "Compiling segmentation GT…");
+  try {
+    const data = await api("POST", `/training/compile-seg/${dsId}`);
+    if (data.status === "done") {
+      setStatus("compile-seg-status", `Job ${data.job_id}: seg GT ready.`, "success");
+      populateTrainingSelects(); // refresh seg-compiled flags in dropdowns
+    } else {
+      const el = document.getElementById("compile-seg-status");
+      el.textContent = `Job ${data.job_id}: failed. `;
+      el.className = "status error";
+      const btn = document.createElement("button");
+      btn.className = "btn btn-secondary btn-sm";
+      btn.textContent = "View log";
+      btn.onclick = () => startLogStream(data.job_id, "failed");
+      el.appendChild(btn);
+    }
+    loadJobs();
+  } catch (err) {
+    setStatus("compile-seg-status", `Error: ${err.message}`, "error");
+  }
+});
+
+document.getElementById("btn-start-segtrain").addEventListener("click", async () => {
+  const dsId = document.getElementById("seg-train-dataset-select").value;
+  const name = document.getElementById("seg-train-output-name").value.trim();
+  const epochs = parseInt(document.getElementById("seg-train-epochs").value);
+  const base = document.getElementById("seg-train-base-model").value;
+  if (!dsId || !name) { setStatus("seg-train-status", "Dataset and run name are required.", "error"); return; }
+
+  setStatus("seg-train-status", "Starting…");
+  try {
+    const data = await api("POST", "/training/start-seg", {
+      dataset_id: parseInt(dsId), output_name: name,
+      epochs, base_model: base || null,
+    });
+    setStatus("seg-train-status", `Job ${data.job_id} started (PID ${data.pid}).`, "success");
+    document.getElementById("btn-stop-segtrain").disabled = false;
+    document.getElementById("btn-start-segtrain").disabled = true;
+    activeJobId = data.job_id;
+    startLogStream(data.job_id);
+    loadJobs();
+    startJobPolling();
+  } catch (err) {
+    setStatus("seg-train-status", `Error: ${err.message}`, "error");
+  }
+});
+
+document.getElementById("btn-stop-segtrain").addEventListener("click", async () => {
+  if (!activeJobId) return;
+  await api("POST", `/training/jobs/${activeJobId}/stop`);
+  setStatus("seg-train-status", "Stop signal sent.", "info");
+  document.getElementById("btn-stop-segtrain").disabled = true;
+  document.getElementById("btn-start-segtrain").disabled = false;
 });
 
 document.getElementById("btn-start-train").addEventListener("click", async () => {

@@ -52,12 +52,14 @@ def list_datasets(db: Session = Depends(get_db)):
     for ds in datasets:
         folios = db.query(Folio).filter(Folio.dataset_id == ds.id).all()
         arrow = compiled_dir / f"dataset_{ds.id}.arrow"
+        seg_manifest = compiled_dir / f"seg_dataset_{ds.id}.txt"
         result.append({
             "id": ds.id,
             "name": ds.name,
             "uploaded_at": ds.uploaded_at.isoformat(),
             "folio_count": len(folios),
             "compiled": arrow.exists() and arrow.stat().st_size > 4096,
+            "seg_compiled": seg_manifest.exists() and seg_manifest.stat().st_size > 0,
             "image_status": {
                 s: sum(1 for f in folios if f.image_status == s)
                 for s in ("pending", "downloading", "done", "failed")

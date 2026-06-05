@@ -58,10 +58,14 @@ def folio_lines_dir(folio_id: int) -> Path:
     return d
 
 
-async def segment_folio(folio: Folio, db: Session) -> list[int]:
+async def segment_folio(folio: Folio, db: Session, seg_model: str | None = None) -> list[int]:
     """
     Run `kraken segment -bl` on the folio image, crop line images,
     insert Line rows, and return the list of new line IDs.
+
+    Args:
+        seg_model: Optional path to a custom .safetensors segmentation model.
+                   If None, kraken's built-in baseline model is used.
     """
     if not folio.local_image_path:
         raise ValueError("Folio has no local image")
@@ -74,8 +78,12 @@ async def segment_folio(folio: Folio, db: Session) -> list[int]:
     with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as tf:
         seg_out = tf.name
 
+    segment_cmd = ["segment", "-bl"]
+    if seg_model:
+        segment_cmd += ["-i", seg_model]
+
     proc = await asyncio.create_subprocess_exec(
-        "kraken", "-i", str(image_path), seg_out, "segment", "-bl",
+        "kraken", "-i", str(image_path), seg_out, *segment_cmd,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
     )
@@ -120,6 +128,8 @@ async def segment_folio(folio: Folio, db: Session) -> list[int]:
             confirmed=False,
         )
         line.set_polygon(polygon)
+        # Store the actual baseline separately for segmentation training
+        line.set_baseline(baseline)
         db.add(line)
         db.flush()
         new_ids.append(line.id)

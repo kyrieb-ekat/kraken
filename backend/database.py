@@ -59,8 +59,11 @@ class Line(Base):
     folio_id = Column(Integer, nullable=False)
     line_index = Column(Integer, nullable=False)
     crop_path = Column(String)
-    # JSON polygon from Kraken segment output: [[x,y], ...]
+    # JSON boundary polygon from Kraken segment output: [[x,y], ...]
     polygon = Column(Text, default="[]")
+    # JSON baseline polyline from Kraken segment output: [[x,y], ...]
+    # Stored separately so segmentation GT can use the actual detected baseline.
+    baseline = Column(Text, default="[]")
     transcription = Column(Text)
     confirmed = Column(Boolean, default=False)
 
@@ -69,6 +72,12 @@ class Line(Base):
 
     def set_polygon(self, pts):
         self.polygon = json.dumps(pts)
+
+    def get_baseline(self):
+        return json.loads(self.baseline or "[]")
+
+    def set_baseline(self, pts):
+        self.baseline = json.dumps(pts)
 
 
 class Job(Base):
@@ -95,6 +104,23 @@ class Job(Base):
 
 
 Base.metadata.create_all(bind=engine)
+
+
+def _migrate():
+    """Apply lightweight schema migrations for columns added after initial release."""
+    with engine.connect() as conn:
+        existing = {row[1] for row in conn.execute(
+            engine.dialect.get_check_constraints(conn, "lines") if False
+            else conn.exec_driver_sql("PRAGMA table_info(lines)")
+        )}
+        # Add baseline column if missing (added in v2)
+        col_names = {row[1] for row in conn.exec_driver_sql("PRAGMA table_info(lines)")}
+        if "baseline" not in col_names:
+            conn.exec_driver_sql("ALTER TABLE lines ADD COLUMN baseline TEXT DEFAULT '[]'")
+            conn.commit()
+
+
+_migrate()
 
 
 def get_db():
