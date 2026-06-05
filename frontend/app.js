@@ -1789,24 +1789,32 @@ async function populateTrainingSelects() {
   const datasets = await api("GET", "/datasets");
   const models = await api("GET", "/models");
 
-  // Compile select: show all datasets, mark compiled ones
+  // Helper: build a compact compilation-status tag string
+  function compileTags(d) {
+    const tags = [];
+    if (d.compiled)     tags.push("HTR");
+    if (d.seg_compiled) tags.push("Seg");
+    return tags.length ? ` [${tags.join(", ")}]` : "";
+  }
+
+  // Compile select: show all datasets with their current compile state
   const compileSel = document.getElementById("compile-dataset-select");
   compileSel.innerHTML = '<option value="">— Select dataset —</option>' +
-    datasets.map(d => `<option value="${d.id}">${d.name}${d.compiled ? " ✓ compiled" : ""}</option>`).join("");
+    datasets.map(d => `<option value="${d.id}">${d.name}${compileTags(d)}</option>`).join("");
 
-  // Train select: only compiled datasets are usable; grey out the rest
+  // HTR train select: only HTR-compiled datasets are selectable
   const trainSel = document.getElementById("train-dataset-select");
   trainSel.innerHTML = '<option value="">— Select dataset —</option>' +
-    datasets.map(d => `<option value="${d.id}" ${d.compiled ? "" : "disabled"}>${d.name}${d.compiled ? " ✓ compiled" : " (not compiled)"}</option>`).join("");
+    datasets.map(d => `<option value="${d.id}" ${d.compiled ? "" : "disabled"}>${d.name}${compileTags(d)}${d.compiled ? "" : " — compile HTR GT first"}</option>`).join("");
 
   const baseModel = document.getElementById("train-base-model");
   baseModel.innerHTML = '<option value="">Train from scratch</option>' +
     models.map(m => `<option value="${m.path}">${m.relative_path}</option>`).join("");
 
-  // Segmentation training selects
+  // Seg train select: only seg-compiled datasets are selectable
   const segTrainSel = document.getElementById("seg-train-dataset-select");
   segTrainSel.innerHTML = '<option value="">— Select dataset —</option>' +
-    datasets.map(d => `<option value="${d.id}" ${d.seg_compiled ? "" : "disabled"}>${d.name}${d.seg_compiled ? " ✓ seg compiled" : " (not seg compiled)"}</option>`).join("");
+    datasets.map(d => `<option value="${d.id}" ${d.seg_compiled ? "" : "disabled"}>${d.name}${compileTags(d)}${d.seg_compiled ? "" : " — compile Seg GT first"}</option>`).join("");
 
   // Seg base model — only show .safetensors seg models (contain "seg_model" in path)
   const segBaseModel = document.getElementById("seg-train-base-model");
