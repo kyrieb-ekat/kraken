@@ -257,7 +257,11 @@
           <input type="number" id="train-epochs" value="50" min="1" max="2000">
         </div>
         <div class="form-group" style="max-width:100px">
-          <label title="Validation passes with no improvement before stopping early. 0 = run all epochs.">Patience</label>
+          <label title="Validation passes with no improvement before stopping early. 0 = run all epochs.">
+            Patience
+            <span title="⚠️ Keep at 0 for segmentation runs. ketos segtrain scores checkpoints by IoU (which plateaus early) rather than bl_f1 (the metric that actually matters). Early stopping will fire before bl_f1 converges. See trainer.py for details."
+                  style="cursor:help; color:var(--warning, #e6a817); font-size:0.85rem;">⚠</span>
+          </label>
           <input type="number" id="train-patience" value="0" min="0" max="100">
         </div>
       </div>
