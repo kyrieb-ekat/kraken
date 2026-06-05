@@ -69,6 +69,8 @@ async def start_training(
         "-N", str(epochs),
     ]
 
+    # "patience" in our UI maps to kraken's --lag flag (ketos train --help).
+    # --lag N = stop after N consecutive validation passes with no improvement.
     if patience > 0:
         cmd += ["-q", "early", "--lag", str(patience)]
     else:
@@ -215,6 +217,8 @@ async def start_segtrain(
         "-N", str(epochs),
     ]
 
+    # "patience" in our UI maps to kraken's --lag flag (ketos segtrain --help).
+    # --lag N = stop after N consecutive validation passes with no improvement.
     if patience > 0:
         cmd += ["-q", "early", "--lag", str(patience)]
     else:
