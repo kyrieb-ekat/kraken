@@ -1773,8 +1773,7 @@ function startJobPolling() {
       const activeJob = jobs.find(j => j.id === activeJobId);
       if (activeJob && activeJob.status !== "running") {
         document.getElementById("active-job-badge").innerHTML = badge(activeJob.status) + ` Job #${activeJobId}`;
-        document.getElementById("btn-stop-train").disabled = true;
-        document.getElementById("btn-start-train").disabled = false;
+        _setTrainButtons(false);
       }
     }
     if (!anyRunning) stopJobPolling();
@@ -1802,19 +1801,15 @@ async function populateTrainingSelects() {
   compileSel.innerHTML = '<option value="">— Select dataset —</option>' +
     datasets.map(d => `<option value="${d.id}">${d.name}${compileTags(d)}</option>`).join("");
 
-  // HTR train select: only HTR-compiled datasets are selectable
+  // Unified train select — show all datasets; disable based on which button
+  // will be used (handled at click time). Show full compile state always.
   const trainSel = document.getElementById("train-dataset-select");
   trainSel.innerHTML = '<option value="">— Select dataset —</option>' +
-    datasets.map(d => `<option value="${d.id}" ${d.compiled ? "" : "disabled"}>${d.name}${compileTags(d)}${d.compiled ? "" : " — compile HTR GT first"}</option>`).join("");
+    datasets.map(d => `<option value="${d.id}">${d.name}${compileTags(d)}</option>`).join("");
 
   const baseModel = document.getElementById("train-base-model");
   baseModel.innerHTML = '<option value="">Train from scratch</option>' +
     models.map(m => `<option value="${m.path}">${m.relative_path}</option>`).join("");
-
-  // Seg train select: only seg-compiled datasets are selectable
-  const segTrainSel = document.getElementById("seg-train-dataset-select");
-  segTrainSel.innerHTML = '<option value="">— Select dataset —</option>' +
-    datasets.map(d => `<option value="${d.id}" ${d.seg_compiled ? "" : "disabled"}>${d.name}${compileTags(d)}${d.seg_compiled ? "" : " — compile Seg GT first"}</option>`).join("");
 
   // Seg base model — only show .safetensors seg models (contain "seg_model" in path)
   const segBaseModel = document.getElementById("seg-train-base-model");
@@ -1877,70 +1872,119 @@ document.getElementById("btn-compile-seg").addEventListener("click", async () =>
   }
 });
 
-document.getElementById("btn-start-segtrain").addEventListener("click", async () => {
-  const dsId = document.getElementById("seg-train-dataset-select").value;
-  const name = document.getElementById("seg-train-output-name").value.trim();
-  const epochs = parseInt(document.getElementById("seg-train-epochs").value);
-  const base = document.getElementById("seg-train-base-model").value;
-  if (!dsId || !name) { setStatus("seg-train-status", "Dataset and run name are required.", "error"); return; }
+// ── Shared training helpers ───────────────────────────────────────────────────
 
-  setStatus("seg-train-status", "Starting…");
-  try {
-    const data = await api("POST", "/training/start-seg", {
-      dataset_id: parseInt(dsId), output_name: name,
-      epochs, base_model: base || null,
-    });
-    setStatus("seg-train-status", `Job ${data.job_id} started (PID ${data.pid}).`, "success");
-    document.getElementById("btn-stop-segtrain").disabled = false;
-    document.getElementById("btn-start-segtrain").disabled = true;
-    activeJobId = data.job_id;
-    startLogStream(data.job_id);
-    loadJobs();
-    startJobPolling();
-  } catch (err) {
-    setStatus("seg-train-status", `Error: ${err.message}`, "error");
-  }
-});
+function _trainInputs() {
+  return {
+    dsId:   document.getElementById("train-dataset-select").value,
+    name:   document.getElementById("train-output-name").value.trim(),
+    epochs: parseInt(document.getElementById("train-epochs").value),
+    base:   document.getElementById("train-base-model").value,
+    segBase: document.getElementById("seg-train-base-model").value,
+  };
+}
 
-document.getElementById("btn-stop-segtrain").addEventListener("click", async () => {
-  if (!activeJobId) return;
-  await api("POST", `/training/jobs/${activeJobId}/stop`);
-  setStatus("seg-train-status", "Stop signal sent.", "info");
-  document.getElementById("btn-stop-segtrain").disabled = true;
-  document.getElementById("btn-start-segtrain").disabled = false;
-});
+function _setTrainButtons(running) {
+  ["btn-start-train", "btn-start-segtrain", "btn-start-both"].forEach(id => {
+    document.getElementById(id).disabled = running;
+  });
+  document.getElementById("btn-stop-train").disabled = !running;
+}
 
+async function _launchHTR(dsId, name, epochs, base) {
+  const datasets = await api("GET", "/datasets");
+  const ds = datasets.find(d => d.id === parseInt(dsId));
+  if (!ds || !ds.compiled) throw new Error("Dataset has not been compiled for HTR — run Compile Recognition GT first.");
+  return api("POST", "/training/start", {
+    dataset_id: parseInt(dsId), output_name: name,
+    epochs, base_model: base || null,
+  });
+}
+
+async function _launchSeg(dsId, name, epochs, segBase) {
+  const datasets = await api("GET", "/datasets");
+  const ds = datasets.find(d => d.id === parseInt(dsId));
+  if (!ds || !ds.seg_compiled) throw new Error("Dataset has not been compiled for segmentation — run Compile Seg GT first.");
+  return api("POST", "/training/start-seg", {
+    dataset_id: parseInt(dsId), output_name: name,
+    epochs, base_model: segBase || null,
+  });
+}
+
+// HTR only
 document.getElementById("btn-start-train").addEventListener("click", async () => {
-  const dsId = document.getElementById("train-dataset-select").value;
-  const name = document.getElementById("train-output-name").value.trim();
-  const epochs = parseInt(document.getElementById("train-epochs").value);
-  const base = document.getElementById("train-base-model").value;
+  const { dsId, name, epochs, base } = _trainInputs();
   if (!dsId || !name) { setStatus("train-status", "Dataset and run name are required.", "error"); return; }
-
-  setStatus("train-status", "Starting…");
+  setStatus("train-status", "Starting HTR training…");
   try {
-    const data = await api("POST", "/training/start", {
-      dataset_id: parseInt(dsId), output_name: name,
-      epochs, base_model: base || null,
-    });
-    setStatus("train-status", `Job ${data.job_id} started (PID ${data.pid}).`, "success");
-    document.getElementById("btn-stop-train").disabled = false;
-    document.getElementById("btn-start-train").disabled = true;
+    const data = await _launchHTR(dsId, name, epochs, base);
+    setStatus("train-status", `HTR job ${data.job_id} started.`, "success");
     activeJobId = data.job_id;
+    _setTrainButtons(true);
     startLogStream(data.job_id);
     loadJobs();
     startJobPolling();
-  } catch (err) {
-    setStatus("train-status", `Error: ${err.message}`, "error");
-  }
+  } catch (err) { setStatus("train-status", `Error: ${err.message}`, "error"); }
+});
+
+// Segmentation only
+document.getElementById("btn-start-segtrain").addEventListener("click", async () => {
+  const { dsId, name, epochs, segBase } = _trainInputs();
+  if (!dsId || !name) { setStatus("train-status", "Dataset and run name are required.", "error"); return; }
+  setStatus("train-status", "Starting segmentation training…");
+  try {
+    const data = await _launchSeg(dsId, name, epochs, segBase);
+    setStatus("train-status", `Seg job ${data.job_id} started.`, "success");
+    activeJobId = data.job_id;
+    _setTrainButtons(true);
+    startLogStream(data.job_id);
+    loadJobs();
+    startJobPolling();
+  } catch (err) { setStatus("train-status", `Error: ${err.message}`, "error"); }
+});
+
+// Both — HTR first, then seg automatically when HTR finishes
+document.getElementById("btn-start-both").addEventListener("click", async () => {
+  const { dsId, name, epochs, base, segBase } = _trainInputs();
+  if (!dsId || !name) { setStatus("train-status", "Dataset and run name are required.", "error"); return; }
+  setStatus("train-status", "Starting HTR training… (segmentation will follow automatically)");
+  try {
+    const htrData = await _launchHTR(dsId, name, epochs, base);
+    activeJobId = htrData.job_id;
+    _setTrainButtons(true);
+    startLogStream(htrData.job_id);
+    loadJobs();
+    startJobPolling();
+
+    // Poll until the HTR job finishes, then launch seg
+    const htrJobId = htrData.job_id;
+    (async () => {
+      while (true) {
+        await new Promise(r => setTimeout(r, 5000));
+        const status = await api("GET", `/training/jobs/${htrJobId}/status`).catch(() => null);
+        if (!status || status.status === "stopped") return;
+        if (status.status === "done" || status.status === "failed") break;
+      }
+      setStatus("train-status", "HTR done — starting segmentation training…", "info");
+      try {
+        const segData = await _launchSeg(dsId, name, epochs, segBase);
+        setStatus("train-status", `Seg job ${segData.job_id} started.`, "success");
+        activeJobId = segData.job_id;
+        startLogStream(segData.job_id);
+        loadJobs();
+      } catch (err) {
+        setStatus("train-status", `HTR done, but seg failed to start: ${err.message}`, "error");
+        _setTrainButtons(false);
+      }
+    })();
+  } catch (err) { setStatus("train-status", `Error: ${err.message}`, "error"); }
 });
 
 document.getElementById("btn-stop-train").addEventListener("click", async () => {
   if (!activeJobId) return;
   await api("POST", `/training/jobs/${activeJobId}/stop`);
   setStatus("train-status", "Stop signal sent.", "info");
-  document.getElementById("btn-stop-train").disabled = true;
-  document.getElementById("btn-start-train").disabled = false;
+  _setTrainButtons(false);
 });
 
 function startLogStream(jobId, knownStatus) {
@@ -1959,8 +2003,7 @@ function startLogStream(jobId, knownStatus) {
       if (!knownStatus || knownStatus === "running") {
         document.getElementById("active-job-badge").innerHTML = badge("done") + ` Job #${jobId}`;
       }
-      document.getElementById("btn-stop-train").disabled = true;
-      document.getElementById("btn-start-train").disabled = false;
+      _setTrainButtons(false);
       loadJobs();
       return;
     }

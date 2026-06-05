@@ -240,17 +240,17 @@
     </div>
 
     <div class="card">
-      <h2>Start Training Run</h2>
+      <h2>Train</h2>
       <div class="form-row">
         <div class="form-group">
-          <label>Dataset (compiled)</label>
+          <label>Dataset</label>
           <select id="train-dataset-select">
             <option value="">— Select dataset —</option>
           </select>
         </div>
         <div class="form-group">
           <label>Run name</label>
-          <input type="text" id="train-output-name" placeholder="my_model_v1">
+          <input type="text" id="train-output-name" placeholder="manuscript_v1">
         </div>
         <div class="form-group" style="max-width:100px">
           <label>Epochs</label>
@@ -259,47 +259,26 @@
       </div>
       <div class="form-row">
         <div class="form-group">
-          <label>Base model (optional — fine-tune from existing)</label>
+          <label>Base HTR model (optional)</label>
           <select id="train-base-model">
             <option value="">Train from scratch</option>
           </select>
         </div>
-        <button class="btn btn-primary" id="btn-start-train">Start Training</button>
-        <button class="btn btn-danger" id="btn-stop-train" disabled>Stop</button>
-      </div>
-      <div id="train-status" class="mt-8"></div>
-    </div>
-
-    <div class="card">
-      <h2>Train Segmentation Model</h2>
-      <p class="text-muted" style="margin-bottom:10px">Trains a line-detection model from Gen's corrected page layouts. Use the resulting model in the Review tab to improve auto-segmentation on new pages.</p>
-      <div class="form-row">
         <div class="form-group">
-          <label>Dataset (seg compiled)</label>
-          <select id="seg-train-dataset-select">
-            <option value="">— Select dataset —</option>
-          </select>
-        </div>
-        <div class="form-group">
-          <label>Run name</label>
-          <input type="text" id="seg-train-output-name" placeholder="seg_model_v1">
-        </div>
-        <div class="form-group" style="max-width:100px">
-          <label>Epochs</label>
-          <input type="number" id="seg-train-epochs" value="50" min="1" max="500">
-        </div>
-      </div>
-      <div class="form-row">
-        <div class="form-group">
-          <label>Base seg model (optional — fine-tune from existing)</label>
+          <label>Base seg model (optional)</label>
           <select id="seg-train-base-model">
             <option value="">Train from scratch</option>
           </select>
         </div>
-        <button class="btn btn-primary" id="btn-start-segtrain">Start Seg Training</button>
-        <button class="btn btn-danger" id="btn-stop-segtrain" disabled>Stop</button>
       </div>
-      <div id="seg-train-status" class="mt-8"></div>
+      <div class="form-row" style="align-items:center; gap:8px; flex-wrap:wrap;">
+        <span class="text-muted" style="font-size:0.85rem; margin-right:4px;">Train:</span>
+        <button class="btn btn-primary" id="btn-start-train">HTR</button>
+        <button class="btn btn-primary" id="btn-start-segtrain">Segmentation</button>
+        <button class="btn btn-primary" id="btn-start-both">Both</button>
+        <button class="btn btn-danger" id="btn-stop-train" disabled>Stop</button>
+      </div>
+      <div id="train-status" class="mt-8"></div>
     </div>
 
     <div class="card">
