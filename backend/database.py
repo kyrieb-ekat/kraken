@@ -109,11 +109,6 @@ Base.metadata.create_all(bind=engine)
 def _migrate():
     """Apply lightweight schema migrations for columns added after initial release."""
     with engine.connect() as conn:
-        existing = {row[1] for row in conn.execute(
-            engine.dialect.get_check_constraints(conn, "lines") if False
-            else conn.exec_driver_sql("PRAGMA table_info(lines)")
-        )}
-        # Add baseline column if missing (added in v2)
         col_names = {row[1] for row in conn.exec_driver_sql("PRAGMA table_info(lines)")}
         if "baseline" not in col_names:
             conn.exec_driver_sql("ALTER TABLE lines ADD COLUMN baseline TEXT DEFAULT '[]'")
